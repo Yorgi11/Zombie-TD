@@ -5,7 +5,6 @@ using UnityEngine;
 public sealed class NetworkPlayerController : NetworkBehaviour
 {
     private enum MoveState { Crouch, Walking, Running }
-    private MoveState _moveState;
 
     [Header("Movement")]
     [SerializeField] private float _moveAcceleration = 30f;
@@ -15,6 +14,10 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     [SerializeField] private float _mouseSensitivity = 12f;
     [SerializeField] private Vector2 _camLimits = new(-80f, 80f);
     [SerializeField] private Transform _cameraTarget;
+    [SerializeField, Range(0f, 1f)] private float _animationCamShake = 1f;
+
+    [Header("Server Validation")]
+    [SerializeField] private float _maxLookDeltaPerFrame = 50f;
 
     private InputSystem_Actions _input;
 
@@ -30,34 +33,57 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Camera _cam;
     private Transform _camT;
 
+    // Latest input accepted by the server
+    private Vector2 _serverMoveInput;
+    private Vector2 _serverLookInput;
+    private MoveState _serverMoveState;
+
     private void Awake()
     {
         _t = transform;
         _rb = GetComponent<Rigidbody>();
     }
+
     public override void OnNetworkSpawn()
     {
-        if (!IsOwner) return;
-        _input ??= new();
-        _input.Enable();
-        SetupLocalCamera();
+        if (IsOwner)
+        {
+            _input ??= new();
+            _input.Enable();
+            SetupLocalCamera();
+        }
     }
+
     public override void OnNetworkDespawn()
     {
-        if (!IsOwner) return;
-        _input?.Disable();
+        if (IsOwner)
+        {
+            _input?.Disable();
+        }
     }
+
     private void Update()
     {
         if (!IsOwner) return;
 
         _moveInput = _input.Player.Move.ReadValue<Vector2>();
         _lookInput = _input.Player.Look.ReadValue<Vector2>();
-        _moveState = _input.Player.Crouch.IsPressed() ? MoveState.Crouch :
-                     _input.Player.Sprint.IsPressed() ? MoveState.Running :
-                     MoveState.Walking;
+
+        MoveState moveState =
+            _input.Player.Crouch.IsPressed() ? MoveState.Crouch :
+            _input.Player.Sprint.IsPressed() ? MoveState.Running :
+            MoveState.Walking;
 
         UpdateCamera();
+        SubmitInputToServer(moveState);
+    }
+
+    private void FixedUpdate()
+    {
+        if (!IsServer) return;
+
+        FixedUpdateServerRotation();
+        FixedUpdateMovement();
     }
 
     private void LateUpdate()
@@ -74,9 +100,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             Debug.LogWarning("[NetworkPlayerController] No main camera found.");
             return;
         }
-
         _camT = _cam.transform;
-        _yRot = _t.eulerAngles.y;
+        _camT.SetPositionAndRotation(_cameraTarget.position, _cameraTarget.rotation);
     }
 
     private void UpdateCamera()
@@ -90,7 +115,56 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         if (_camT == null || _cameraTarget == null) return;
 
-        Quaternion targetRot = Quaternion.Euler(_xRot, _yRot, 0f);
-        _camT.SetPositionAndRotation(_cameraTarget.position, targetRot);
+        _camT.SetPositionAndRotation(
+            _cameraTarget.position,
+            Quaternion.Slerp(_camT.rotation, Quaternion.Euler(_xRot, _yRot, 0f), _animationCamShake)
+        );
+    }
+
+    private void FixedUpdateServerRotation()
+    {
+        _t.rotation = Quaternion.Euler(0f, _yRot, 0f);
+    }
+
+    private void FixedUpdateMovement()
+    {
+        Vector3 moveDir = (_t.forward * _serverMoveInput.y + _t.right * _serverMoveInput.x);
+        if (moveDir.sqrMagnitude > 1e-6f) moveDir.Normalize();
+
+        float speed = _moveSpeeds[(int)_serverMoveState];
+        Vector3 targetVel = moveDir * speed;
+        Vector3 vel = _rb.linearVelocity;
+        Vector3 velXZ = new(vel.x, 0f, vel.z);
+        Vector3 accel = (targetVel - velXZ) * _moveAcceleration;
+
+        _rb.AddForce(accel, ForceMode.Acceleration);
+    }
+
+    private void SubmitInputToServer(MoveState moveState)
+    {
+        Vector2 clampedMove = Vector2.ClampMagnitude(_moveInput, 1f);
+
+        float lookX = Mathf.Clamp(_lookInput.x, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+        float lookY = Mathf.Clamp(_lookInput.y, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+        Vector2 clampedLook = new(lookX, lookY);
+
+        SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _yRot);
+    }
+
+    [ServerRpc]
+    private void SubmitInputServerRpc(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
+    {
+        moveInput = Vector2.ClampMagnitude(moveInput, 1f);
+
+        lookInput.x = Mathf.Clamp(lookInput.x, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+        lookInput.y = Mathf.Clamp(lookInput.y, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+
+        if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length)
+            moveStateIndex = (int)MoveState.Walking;
+
+        _serverMoveInput = moveInput;
+        _serverLookInput = lookInput;
+        _serverMoveState = (MoveState)moveStateIndex;
+        _yRot = yaw;
     }
 }

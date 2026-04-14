@@ -1270,6 +1270,7 @@ GameObject:
   - component: {fileID: 320406343591041170}
   - component: {fileID: 3280334126651371695}
   - component: {fileID: 990731114387375006}
+  - component: {fileID: 1526372249302388755}
   m_Layer: 5
   m_Name: ServerEntry
   m_TagString: Untagged
@@ -1341,6 +1342,28 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 0.7
+--- !u!114 &1526372249302388755
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8367002770584518267}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e822594743745a34b9631a22df5910e8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ServerEntryUI
+  _serverNameText: {fileID: 641986880713146435}
+  _serverIPText: {fileID: 829531093791795736}
+  _serverStatusText: {fileID: 2139061668258036384}
+  _serverPingText: {fileID: 3960742036800208752}
+  _serverPlayerCountText: {fileID: 3475101186358910305}
+  _serverStatusImage: {fileID: 2934170538116562931}
+  _deleteButton: {fileID: 1732192281052997851}
+  _joinButton: {fileID: 8488326614085986522}
+  _onlineColor: {r: 0, g: 1, b: 0, a: 1}
+  _offlineColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!1 &9171254676437568225
 GameObject:
   m_ObjectHideFlags: 0

@@ -87,6 +87,19 @@ public sealed class NetBootstrap : MonoBehaviour
             ? $"[NetBootstrap] Client connecting to {ip}:{_port}."
             : "[NetBootstrap] Failed to start client.");
     }
+    public void StartClient(string ip, ushort port)
+    {
+        ShutdownIfRunning();
+
+        if (string.IsNullOrWhiteSpace(ip)) ip = _defaultIP;
+
+        _transport.SetConnectionData(ip.Trim(), port);
+        bool success = _networkManager.StartClient();
+
+        Debug.Log(success
+            ? $"[NetBootstrap] Client connecting to {ip}:{port}."
+            : "[NetBootstrap] Failed to start client.");
+    }
     public void StartClient(TMP_InputField input)
     {
         ShutdownIfRunning();

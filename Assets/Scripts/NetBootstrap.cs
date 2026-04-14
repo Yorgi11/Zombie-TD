@@ -94,6 +94,8 @@ public sealed class NetBootstrap : MonoBehaviour
         string ip = input != null ? input.text : _defaultIP;
         if (string.IsNullOrWhiteSpace(ip)) ip = _defaultIP;
 
+
+
         _transport.SetConnectionData(ip.Trim(), _port);
         bool success = _networkManager.StartClient();
 
@@ -116,6 +118,8 @@ public sealed class NetBootstrap : MonoBehaviour
 
     public void ShutdownIfRunning()
     {
+        _gameSceneLoaded = false;
+
         if (_networkManager != null && _networkManager.IsListening)
         {
             _networkManager.Shutdown();
@@ -133,9 +137,15 @@ public sealed class NetBootstrap : MonoBehaviour
         Debug.Log("[NetBootstrap] Server started callback.");
     }
 
+    private bool _gameSceneLoaded;
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"[NetBootstrap] Client connected: {clientId}");
+
+        if (!_networkManager.IsServer || _gameSceneLoaded) return;
+
+        _gameSceneLoaded = true;
+        _networkManager.SceneManager.LoadScene("Game", LoadSceneMode.Single);
     }
 
     private void OnClientDisconnected(ulong clientId)

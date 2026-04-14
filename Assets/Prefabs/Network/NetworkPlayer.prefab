@@ -280,16 +280,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkPlayerController
   ShowTopMostFoldoutHeaderGroup: 1
-  _moveAcceleration: 30
+  _moveAcceleration: 6
   _moveSpeeds:
   - 3
   - 5
   - 10
-  _mouseSensitivity: 12
+  _mouseSensitivity: 200
   _camLimits: {x: -80, y: 80}
   _cameraTarget: {fileID: 7847171445600904104}
   _animationCamShake: 1
-  _maxLookDeltaPerFrame: 50
+  _maxLookDeltaPerFrame: 90
 --- !u!1 &6162241823945816043
 GameObject:
   m_ObjectHideFlags: 0

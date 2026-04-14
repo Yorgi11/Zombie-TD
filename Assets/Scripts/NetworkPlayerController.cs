@@ -148,23 +148,26 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         float lookY = Mathf.Clamp(_lookInput.y, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
         Vector2 clampedLook = new(lookX, lookY);
 
+        if (IsServer)
+        {
+            ApplyInputAuthoritative(clampedMove, clampedLook, (int)moveState, _yRot);
+            return;
+        }
+
         SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _yRot);
+    }
+    private void ApplyInputAuthoritative(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
+    {
+        if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length) moveStateIndex = (int)MoveState.Walking;
+        _serverMoveInput = moveInput;
+        _serverLookInput = lookInput;
+        _serverMoveState = (MoveState)moveStateIndex;
+        _yRot = yaw;
     }
 
     [ServerRpc]
     private void SubmitInputServerRpc(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
     {
-        moveInput = Vector2.ClampMagnitude(moveInput, 1f);
-
-        lookInput.x = Mathf.Clamp(lookInput.x, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
-        lookInput.y = Mathf.Clamp(lookInput.y, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
-
-        if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length)
-            moveStateIndex = (int)MoveState.Walking;
-
-        _serverMoveInput = moveInput;
-        _serverLookInput = lookInput;
-        _serverMoveState = (MoveState)moveStateIndex;
-        _yRot = yaw;
+        ApplyInputAuthoritative(moveInput, lookInput, moveStateIndex, yaw);
     }
 }

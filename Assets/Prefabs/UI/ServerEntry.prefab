@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 3558617958718855715}
   - component: {fileID: 1236409979330535931}
   m_Layer: 5
-  m_Name: PingCountImage
+  m_Name: PingImage
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -505,8 +505,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -100, y: -12.5}
-  m_SizeDelta: {x: -200, y: -25}
+  m_AnchoredPosition: {x: -94, y: -12.5}
+  m_SizeDelta: {x: -188, y: -25}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &11639317344825073
 CanvasRenderer:
@@ -1359,6 +1359,7 @@ MonoBehaviour:
   _serverStatusText: {fileID: 2139061668258036384}
   _serverPingText: {fileID: 3960742036800208752}
   _serverPlayerCountText: {fileID: 3475101186358910305}
+  _serverPingImage: {fileID: 1236409979330535931}
   _serverStatusImage: {fileID: 2934170538116562931}
   _deleteButton: {fileID: 1732192281052997851}
   _joinButton: {fileID: 8488326614085986522}

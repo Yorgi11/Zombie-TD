@@ -302,20 +302,15 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void HandleJump()
     {
-        if (_serverJumpPressedThisFrame) _serverJumpBufferCounter = _jumpBufferTime;
+        bool wantsJump = _serverJumpPressedThisFrame || (_serverJumpHeld && _serverIsGrounded && !_serverJumpConsumedSinceGrounded);
+
+        if (wantsJump) _serverJumpBufferCounter = _jumpBufferTime;
         else if (_serverJumpBufferCounter > 0f) _serverJumpBufferCounter -= Time.fixedDeltaTime;
+        _serverJumpPressedThisFrame = false;
 
-        if (_serverJumpBufferCounter <= 0f || !_serverIsGrounded || _serverJumpConsumedSinceGrounded)
-        {
-            _serverJumpPressedThisFrame = false;
-            return;
-        }
+        if (_serverJumpBufferCounter <= 0f || !_serverIsGrounded || _serverJumpConsumedSinceGrounded) return;
 
-        if (!CheckGround(out Vector3 groundPoint))
-        {
-            _serverJumpPressedThisFrame = false;
-            return;
-        }
+        if (!CheckGround(out Vector3 groundPoint)) return;
 
         SnapToGround(groundPoint);
 
@@ -327,7 +322,6 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _rb.AddForce(Vector3.up * jumpVelocity, ForceMode.VelocityChange);
 
         _serverJumpBufferCounter = 0f;
-        _serverJumpPressedThisFrame = false;
         _serverJumpConsumedSinceGrounded = true;
         _serverIsGrounded = false;
     }

@@ -40,15 +40,9 @@ public sealed class NetBootstrap : MonoBehaviour
         _networkManager = GetComponent<NetworkManager>();
         _transport = GetComponent<UnityTransport>();
 
-        if (_networkManager == null)
+        if (_networkManager == null || _transport == null)
         {
-            Debug.LogError("[NetBootstrap] NetworkManager missing.");
-            return;
-        }
-
-        if (_transport == null)
-        {
-            Debug.LogError("[NetBootstrap] UnityTransport missing.");
+            Debug.LogError("[NetBootstrap] Missing NetworkManager or UnityTransport.");
             return;
         }
 
@@ -56,6 +50,12 @@ public sealed class NetBootstrap : MonoBehaviour
         _networkManager.OnClientDisconnectCallback += OnClientDisconnected;
         _networkManager.OnServerStarted += OnServerStarted;
         _networkManager.ConnectionApprovalCallback = ApprovalCheck;
+    }
+    private void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
+    {
+        response.Approved = true;
+        response.CreatePlayerObject = false;
+        response.Pending = false;
     }
 
     private void OnDestroy()
@@ -67,18 +67,11 @@ public sealed class NetBootstrap : MonoBehaviour
             _networkManager.OnServerStarted -= OnServerStarted;
             _networkManager.ConnectionApprovalCallback = null;
 
-            if (_networkManager.SceneManager != null)
+            if (_networkManager != null && _networkManager.SceneManager != null)
                 _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
         }
 
         if (Instance == this) Instance = null;
-    }
-
-    private void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
-    {
-        response.Approved = true;
-        response.CreatePlayerObject = false;
-        response.Pending = false;
     }
 
     public void StartHost()
@@ -144,19 +137,12 @@ public sealed class NetBootstrap : MonoBehaviour
         _gameSceneLoaded = false;
 
         if (_networkManager != null && _networkManager.IsListening)
-        {
             _networkManager.Shutdown();
-        }
     }
 
     public void LoadGameScene()
     {
         if (_networkManager == null || !_networkManager.IsServer || _gameSceneLoaded) return;
-        if (_networkManager.SceneManager == null)
-        {
-            Debug.LogError("[NetBootstrap] NetworkSceneManager is null.");
-            return;
-        }
 
         _gameSceneLoaded = true;
         _networkManager.SceneManager.LoadScene("Game", LoadSceneMode.Single);
@@ -180,6 +166,10 @@ public sealed class NetBootstrap : MonoBehaviour
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"[NetBootstrap] Client connected: {clientId}");
+
+        if (!_networkManager.IsServer || _gameSceneLoaded) return;
+
+        LoadGameScene();
     }
 
     private void OnClientDisconnected(ulong clientId)

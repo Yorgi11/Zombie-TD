@@ -27,6 +27,8 @@ public sealed class ServerEntryUI : MonoBehaviour
     private RecentJoinCodeEntry _savedEntry;
     private SessionBrowser _browser;
 
+    public RecentJoinCodeEntry SavedEntry => _savedEntry;
+
     public void BindSavedCode(SessionBrowser browser, RecentJoinCodeEntry entry)
     {
         _browser = browser;
@@ -38,20 +40,7 @@ public sealed class ServerEntryUI : MonoBehaviour
         if (_serverIPText != null)
             _serverIPText.text = string.IsNullOrWhiteSpace(entry.Code) ? "Code: ---" : $"Code: {entry.Code}";
 
-        if (_serverStatusText != null)
-            _serverStatusText.text = "Saved";
-
-        if (_serverPingText != null)
-            _serverPingText.text = "---";
-
-        if (_serverPlayerCountText != null)
-            _serverPlayerCountText.text = "-/-";
-
-        if (_serverStatusImage != null)
-            _serverStatusImage.color = _unknownColor;
-
-        if (_serverPingImage != null)
-            _serverPingImage.color = _unknownColor;
+        SetRefreshing();
 
         if (_joinButton != null)
         {
@@ -66,6 +55,41 @@ public sealed class ServerEntryUI : MonoBehaviour
             _deleteButton.onClick.RemoveAllListeners();
             _deleteButton.onClick.AddListener(OnClickDeleteSavedCode);
         }
+    }
+
+    public void SetRefreshing()
+    {
+        if (_serverStatusText != null) _serverStatusText.text = "Refreshing";
+        if (_serverPingText != null) _serverPingText.text = "---";
+        if (_serverPlayerCountText != null) _serverPlayerCountText.text = "-/-";
+
+        if (_serverStatusImage != null) _serverStatusImage.color = _unknownColor;
+        if (_serverPingImage != null) _serverPingImage.color = _unknownColor;
+    }
+
+    public void SetOffline()
+    {
+        if (_serverStatusText != null) _serverStatusText.text = "Offline";
+        if (_serverPingText != null) _serverPingText.text = "---";
+        if (_serverPlayerCountText != null) _serverPlayerCountText.text = "-/-";
+
+        if (_serverStatusImage != null) _serverStatusImage.color = _offlineColor;
+        if (_serverPingImage != null) _serverPingImage.color = _offlineColor;
+    }
+
+    public void SetOnline(string reportedName, int currentPlayers, int maxPlayers)
+    {
+        if (_serverNameText != null)
+            _serverNameText.text = string.IsNullOrWhiteSpace(reportedName)
+                ? (string.IsNullOrWhiteSpace(_savedEntry?.Name) ? "Saved Session" : _savedEntry.Name)
+                : reportedName;
+
+        if (_serverStatusText != null) _serverStatusText.text = "Online";
+        if (_serverPingText != null) _serverPingText.text = "---";
+        if (_serverPlayerCountText != null) _serverPlayerCountText.text = $"{Mathf.Max(0, currentPlayers)}/{Mathf.Max(1, maxPlayers)}";
+
+        if (_serverStatusImage != null) _serverStatusImage.color = _onlineColor;
+        if (_serverPingImage != null) _serverPingImage.color = _unknownColor;
     }
 
     private void OnClickJoinSavedCode()

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using TMPro;
+using Unity.Services.Multiplayer;
 using UnityEngine;
 
 public sealed class SessionBrowser : MonoBehaviour
@@ -14,8 +16,13 @@ public sealed class SessionBrowser : MonoBehaviour
     [SerializeField] private Transform _entryParent;
     [SerializeField] private ServerEntryUI _entryPrefab;
 
+    [Header("Refresh")]
+    [SerializeField] private int _queryCount = 50;
+
     private readonly List<RecentJoinCodeEntry> _savedEntries = new();
     private readonly List<ServerEntryUI> _spawnedEntries = new();
+
+    private bool _refreshInProgress;
 
     private string SavePath => Path.Combine(Application.persistentDataPath, "saved_join_codes.json");
 
@@ -23,6 +30,7 @@ public sealed class SessionBrowser : MonoBehaviour
     {
         LoadSavedEntries();
         RebuildUI();
+        RefreshNow();
     }
 
     public void AddEntryFromInput()
@@ -51,6 +59,7 @@ public sealed class SessionBrowser : MonoBehaviour
         _savedEntries.Add(entry);
         SaveEntries();
         RebuildUI();
+        RefreshNow();
 
         if (_serverNameInput != null) _serverNameInput.text = string.Empty;
         if (_joinCodeInput != null) _joinCodeInput.text = string.Empty;
@@ -68,14 +77,115 @@ public sealed class SessionBrowser : MonoBehaviour
     public async void JoinSavedEntry(RecentJoinCodeEntry entry)
     {
         if (entry == null || string.IsNullOrWhiteSpace(entry.Code)) return;
-
         await NetBootstrap.Instance.JoinSessionByCodeAsync(entry.Code);
     }
 
     public void RefreshNow()
     {
-        LoadSavedEntries();
-        RebuildUI();
+        if (_refreshInProgress) return;
+        _ = RefreshNowAsync();
+    }
+
+    private async Task RefreshNowAsync()
+    {
+        _refreshInProgress = true;
+
+        try
+        {
+            if (NetBootstrap.Instance == null)
+            {
+                RebuildUI();
+                return;
+            }
+
+            bool servicesReady = await NetBootstrap.Instance.InitializeServicesAsync();
+            if (!servicesReady)
+            {
+                RebuildUI();
+                return;
+            }
+
+            RebuildUI();
+            SetAllRefreshing();
+
+            QuerySessionsOptions options = new()
+            {
+                Count = _queryCount
+            };
+
+            QuerySessionsResults results = await MultiplayerService.Instance.QuerySessionsAsync(options);
+
+            Dictionary<string, ISessionInfo> sessionsByJoinCode = BuildJoinCodeLookup(results);
+
+            for (int i = 0; i < _savedEntries.Count && i < _spawnedEntries.Count; i++)
+            {
+                RecentJoinCodeEntry saved = _savedEntries[i];
+                ServerEntryUI ui = _spawnedEntries[i];
+                if (saved == null || ui == null) continue;
+
+                if (sessionsByJoinCode.TryGetValue(saved.Code, out ISessionInfo session))
+                {
+                    int maxPlayers = session.MaxPlayers;
+                    int availableSlots = session.AvailableSlots;
+                    int currentPlayers = Mathf.Max(0, maxPlayers - availableSlots);
+
+                    ui.SetOnline(session.Name, currentPlayers, maxPlayers);
+                }
+                else
+                {
+                    ui.SetOffline();
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[SessionBrowser] Failed to refresh saved sessions.\n{e}");
+
+            for (int i = 0; i < _spawnedEntries.Count; i++)
+            {
+                if (_spawnedEntries[i] != null)
+                    _spawnedEntries[i].SetOffline();
+            }
+        }
+        finally
+        {
+            _refreshInProgress = false;
+        }
+    }
+
+    private Dictionary<string, ISessionInfo> BuildJoinCodeLookup(QuerySessionsResults results)
+    {
+        Dictionary<string, ISessionInfo> lookup = new(StringComparer.OrdinalIgnoreCase);
+
+        if (results == null || results.Sessions == null)
+            return lookup;
+
+        foreach (ISessionInfo session in results.Sessions)
+        {
+            if (session == null) continue;
+
+            // We expect the host to publish the join code in a public property named "joinCode".
+            if (session.Properties == null) continue;
+            if (!session.Properties.TryGetValue("joinCode", out var joinCodeProperty)) continue;
+            if (joinCodeProperty == null) continue;
+
+            string joinCode = joinCodeProperty.Value;
+            if (string.IsNullOrWhiteSpace(joinCode)) continue;
+
+            if (!lookup.ContainsKey(joinCode))
+                lookup.Add(joinCode, session);
+        }
+
+        return lookup;
+    }
+
+    private void SetAllRefreshing()
+    {
+        for (int i = 0; i < _spawnedEntries.Count; i++)
+        {
+            if (_spawnedEntries[i] != null)
+                _spawnedEntries[i].SetRefreshing();
+        }
     }
 
     private bool ContainsCode(string joinCode)

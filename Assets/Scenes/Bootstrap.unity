@@ -423,7 +423,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 2094606985}
         m_TargetAssemblyTypeName: MenuUI, Assembly-CSharp
-        m_MethodName: OnClickRefreshServers
+        m_MethodName: OnClickRefresh
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -915,9 +915,9 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2094606983}
-        m_TargetAssemblyTypeName: ServerBrowser, Assembly-CSharp
-        m_MethodName: AddServerFromInput
+      - m_Target: {fileID: 2094606985}
+        m_TargetAssemblyTypeName: MenuUI, Assembly-CSharp
+        m_MethodName: OnClickAddSavedCode
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

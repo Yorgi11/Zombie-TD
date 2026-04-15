@@ -143,11 +143,11 @@ public sealed class NetBootstrap : MonoBehaviour
             _currentSession = await MultiplayerService.Instance.CreateSessionAsync(options);
             _currentSessionCode = _currentSession.Code;
 
-            Debug.Log($"[NetBootstrap] Session created. Id={_currentSession.Id}, Code={_currentSessionCode}, Name={finalName}");
+            var hostSession = _currentSession.AsHost();
+            hostSession.SetProperty("joinCode", new SessionProperty(_currentSessionCode, VisibilityPropertyOptions.Public));
+            await hostSession.SavePropertiesAsync();
 
-            // Depending on installed MPS SDK minor version, sessions + NGO may auto-manage
-            // network startup, or may require the default NGO network handler path.
-            // Keep your existing NGO spawn/scene flow in place.
+            Debug.Log($"[NetBootstrap] Session created. Id={_currentSession.Id}, Code={_currentSessionCode}, Name={finalName}");
         }
         catch (Exception e)
         {

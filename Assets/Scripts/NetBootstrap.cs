@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TMPro;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
@@ -12,8 +13,14 @@ public sealed class NetBootstrap : MonoBehaviour
     [SerializeField] private string _defaultIP = "127.0.0.1";
     [SerializeField] private ushort _port = 7777;
 
+    [Header("Player Spawning")]
+    [SerializeField] private NetworkObject _playerPrefab;
+    [SerializeField] private Vector3 _spawnOrigin = Vector3.zero;
+    [SerializeField] private float _spawnSpacing = 3f;
+
     private NetworkManager _networkManager;
     private UnityTransport _transport;
+    private bool _gameSceneLoaded;
 
     public string DefaultIP => _defaultIP;
     public ushort Port => _port;
@@ -33,21 +40,16 @@ public sealed class NetBootstrap : MonoBehaviour
         _networkManager = GetComponent<NetworkManager>();
         _transport = GetComponent<UnityTransport>();
 
-        if (_networkManager == null)
+        if (_networkManager == null || _transport == null)
         {
-            Debug.LogError("[NetBootstrap] NetworkManager missing.");
-            return;
-        }
-
-        if (_transport == null)
-        {
-            Debug.LogError("[NetBootstrap] UnityTransport missing.");
+            Debug.LogError("[NetBootstrap] Missing NetworkManager or UnityTransport.");
             return;
         }
 
         _networkManager.OnClientConnectedCallback += OnClientConnected;
         _networkManager.OnClientDisconnectCallback += OnClientDisconnected;
         _networkManager.OnServerStarted += OnServerStarted;
+        _networkManager.SceneManager.OnLoadEventCompleted += OnLoadEventCompleted;
     }
 
     private void OnDestroy()
@@ -57,6 +59,9 @@ public sealed class NetBootstrap : MonoBehaviour
             _networkManager.OnClientConnectedCallback -= OnClientConnected;
             _networkManager.OnClientDisconnectCallback -= OnClientDisconnected;
             _networkManager.OnServerStarted -= OnServerStarted;
+
+            if (_networkManager.SceneManager != null)
+                _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
         }
 
         if (Instance == this) Instance = null;
@@ -87,6 +92,7 @@ public sealed class NetBootstrap : MonoBehaviour
             ? $"[NetBootstrap] Client connecting to {ip}:{_port}."
             : "[NetBootstrap] Failed to start client.");
     }
+
     public void StartClient(string ip, ushort port)
     {
         ShutdownIfRunning();
@@ -100,21 +106,11 @@ public sealed class NetBootstrap : MonoBehaviour
             ? $"[NetBootstrap] Client connecting to {ip}:{port}."
             : "[NetBootstrap] Failed to start client.");
     }
+
     public void StartClient(TMP_InputField input)
     {
-        ShutdownIfRunning();
-
         string ip = input != null ? input.text : _defaultIP;
-        if (string.IsNullOrWhiteSpace(ip)) ip = _defaultIP;
-
-
-
-        _transport.SetConnectionData(ip.Trim(), _port);
-        bool success = _networkManager.StartClient();
-
-        Debug.Log(success
-            ? $"[NetBootstrap] Client connecting to {ip}:{_port}."
-            : "[NetBootstrap] Failed to start client.");
+        StartClient(ip);
     }
 
     public void StartServer()
@@ -134,14 +130,14 @@ public sealed class NetBootstrap : MonoBehaviour
         _gameSceneLoaded = false;
 
         if (_networkManager != null && _networkManager.IsListening)
-        {
             _networkManager.Shutdown();
-        }
     }
 
     public void LoadGameScene()
     {
-        if (_networkManager == null || !_networkManager.IsServer) return;
+        if (_networkManager == null || !_networkManager.IsServer || _gameSceneLoaded) return;
+
+        _gameSceneLoaded = true;
         _networkManager.SceneManager.LoadScene("Game", LoadSceneMode.Single);
     }
 
@@ -150,19 +146,48 @@ public sealed class NetBootstrap : MonoBehaviour
         Debug.Log("[NetBootstrap] Server started callback.");
     }
 
-    private bool _gameSceneLoaded;
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"[NetBootstrap] Client connected: {clientId}");
 
         if (!_networkManager.IsServer || _gameSceneLoaded) return;
 
-        _gameSceneLoaded = true;
-        _networkManager.SceneManager.LoadScene("Game", LoadSceneMode.Single);
+        LoadGameScene();
     }
 
     private void OnClientDisconnected(ulong clientId)
     {
         Debug.Log($"[NetBootstrap] Client disconnected: {clientId}");
+    }
+
+    private void OnLoadEventCompleted(string sceneName, LoadSceneMode loadSceneMode, List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
+    {
+        if (!_networkManager.IsServer) return;
+        if (sceneName != "Game") return;
+
+        SpawnPlayersForConnectedClients();
+    }
+
+    private void SpawnPlayersForConnectedClients()
+    {
+        if (_playerPrefab == null)
+        {
+            Debug.LogError("[NetBootstrap] Player prefab is not assigned.");
+            return;
+        }
+
+        int index = 0;
+        foreach (ulong clientId in _networkManager.ConnectedClientsIds)
+        {
+            if (_networkManager.SpawnManager.GetPlayerNetworkObject(clientId) != null)
+                continue;
+
+            Vector3 spawnPos = _spawnOrigin + new Vector3(index * _spawnSpacing, 1f, 0f);
+            Quaternion spawnRot = Quaternion.identity;
+
+            NetworkObject player = Instantiate(_playerPrefab, spawnPos, spawnRot);
+            player.SpawnAsPlayerObject(clientId, true);
+            index++;
+        }
     }
 }

@@ -1159,7 +1159,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Enter server IP
+  m_text: Enter server join code
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -3209,6 +3209,7 @@ MonoBehaviour:
   _joinCodeInput: {fileID: 846263815}
   _entryParent: {fileID: 1704339808}
   _entryPrefab: {fileID: 1526372249302388755, guid: d33c5b536f5e67f47abccd3c479d625b, type: 3}
+  _queryCount: 50
 --- !u!4 &2094606984
 Transform:
   m_ObjectHideFlags: 0

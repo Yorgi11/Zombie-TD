@@ -8,11 +8,9 @@ public sealed class ServerEntryUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI _serverNameText;
     [SerializeField] private TextMeshProUGUI _serverIPText;
     [SerializeField] private TextMeshProUGUI _serverStatusText;
-    [SerializeField] private TextMeshProUGUI _serverPingText;
     [SerializeField] private TextMeshProUGUI _serverPlayerCountText;
 
     [Header("Images")]
-    [SerializeField] private Image _serverPingImage;
     [SerializeField] private Image _serverStatusImage;
 
     [Header("Buttons")]
@@ -60,21 +58,17 @@ public sealed class ServerEntryUI : MonoBehaviour
     public void SetRefreshing()
     {
         if (_serverStatusText != null) _serverStatusText.text = "Refreshing";
-        if (_serverPingText != null) _serverPingText.text = "---";
         if (_serverPlayerCountText != null) _serverPlayerCountText.text = "-/-";
 
         if (_serverStatusImage != null) _serverStatusImage.color = _unknownColor;
-        if (_serverPingImage != null) _serverPingImage.color = _unknownColor;
     }
 
     public void SetOffline()
     {
         if (_serverStatusText != null) _serverStatusText.text = "Offline";
-        if (_serverPingText != null) _serverPingText.text = "---";
         if (_serverPlayerCountText != null) _serverPlayerCountText.text = "-/-";
 
         if (_serverStatusImage != null) _serverStatusImage.color = _offlineColor;
-        if (_serverPingImage != null) _serverPingImage.color = _offlineColor;
     }
 
     public void SetOnline(string reportedName, int currentPlayers, int maxPlayers)
@@ -85,11 +79,9 @@ public sealed class ServerEntryUI : MonoBehaviour
                 : reportedName;
 
         if (_serverStatusText != null) _serverStatusText.text = "Online";
-        if (_serverPingText != null) _serverPingText.text = "---";
         if (_serverPlayerCountText != null) _serverPlayerCountText.text = $"{Mathf.Max(0, currentPlayers)}/{Mathf.Max(1, maxPlayers)}";
 
         if (_serverStatusImage != null) _serverStatusImage.color = _onlineColor;
-        if (_serverPingImage != null) _serverPingImage.color = _unknownColor;
     }
 
     private void OnClickJoinSavedCode()

@@ -7,7 +7,15 @@ public sealed class MenuUI : MonoBehaviour
     [SerializeField] private TMP_InputField _serverNameInput;
     [SerializeField] private TMP_InputField _joinCodeInput;
     [SerializeField] private TMP_Text _currentJoinCodeText;
+    [SerializeField] private TMP_Text _visibilityStateText;
     [SerializeField] private SessionBrowser _sessionBrowser;
+
+    private bool _isPublic = true;
+
+    private void Start()
+    {
+        RefreshVisibilityLabel();
+    }
 
     private void Update()
     {
@@ -18,22 +26,22 @@ public sealed class MenuUI : MonoBehaviour
         }
     }
 
+    public void OnClickToggleVisibility()
+    {
+        _isPublic = !_isPublic;
+        RefreshVisibilityLabel();
+    }
+
     public void OnClickHost()
     {
         string serverName = _serverNameInput != null ? _serverNameInput.text.Trim() : string.Empty;
-        NetBootstrap.Instance.StartSessionHost(serverName);
+        NetBootstrap.Instance.StartSessionHost(serverName, _isPublic);
     }
 
     public async void OnClickJoin()
     {
         string joinCode = _joinCodeInput != null ? _joinCodeInput.text.Trim() : string.Empty;
         await NetBootstrap.Instance.JoinSessionByCodeAsync(joinCode);
-    }
-
-    public void OnClickAddSavedCode()
-    {
-        if (_sessionBrowser != null)
-            _sessionBrowser.AddEntryFromInput();
     }
 
     public void OnClickRefresh()
@@ -53,5 +61,11 @@ public sealed class MenuUI : MonoBehaviour
         if (string.IsNullOrWhiteSpace(NetBootstrap.Instance.CurrentSessionCode)) return;
 
         GUIUtility.systemCopyBuffer = NetBootstrap.Instance.CurrentSessionCode;
+    }
+
+    private void RefreshVisibilityLabel()
+    {
+        if (_visibilityStateText != null)
+            _visibilityStateText.text = _isPublic ? "Public" : "Private";
     }
 }

@@ -123,7 +123,7 @@ public sealed class NetBootstrap : MonoBehaviour
         }
     }
 
-    public async void StartSessionHost(string sessionName)
+    public async void StartSessionHost(string sessionName, bool isPublic)
     {
         bool ready = await InitializeServicesAsync();
         if (!ready) return;
@@ -137,17 +137,14 @@ public sealed class NetBootstrap : MonoBehaviour
             var options = new SessionOptions
             {
                 MaxPlayers = _maxPlayers,
-                Name = finalName
+                Name = finalName,
+                IsPrivate = !isPublic
             }.WithRelayNetwork();
 
             _currentSession = await MultiplayerService.Instance.CreateSessionAsync(options);
             _currentSessionCode = _currentSession.Code;
 
-            var hostSession = _currentSession.AsHost();
-            hostSession.SetProperty("joinCode", new SessionProperty(_currentSessionCode, VisibilityPropertyOptions.Public));
-            await hostSession.SavePropertiesAsync();
-
-            Debug.Log($"[NetBootstrap] Session created. Id={_currentSession.Id}, Code={_currentSessionCode}, Name={finalName}");
+            Debug.Log($"[NetBootstrap] Session created. Id={_currentSession.Id}, Code={_currentSessionCode}, Name={finalName}, Public={isPublic}");
         }
         catch (Exception e)
         {

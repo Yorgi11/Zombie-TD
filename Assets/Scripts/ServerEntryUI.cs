@@ -8,9 +8,11 @@ public sealed class ServerEntryUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI _serverNameText;
     [SerializeField] private TextMeshProUGUI _serverIPText;
     [SerializeField] private TextMeshProUGUI _serverStatusText;
+    [SerializeField] private TextMeshProUGUI _serverPingText;
     [SerializeField] private TextMeshProUGUI _serverPlayerCountText;
 
     [Header("Images")]
+    [SerializeField] private Image _serverPingImage;
     [SerializeField] private Image _serverStatusImage;
 
     [Header("Buttons")]
@@ -22,78 +24,66 @@ public sealed class ServerEntryUI : MonoBehaviour
     [SerializeField] private Color _offlineColor = Color.red;
     [SerializeField] private Color _unknownColor = Color.yellow;
 
-    private RecentJoinCodeEntry _savedEntry;
+    private string _sessionId;
     private SessionBrowser _browser;
 
-    public RecentJoinCodeEntry SavedEntry => _savedEntry;
-
-    public void BindSavedCode(SessionBrowser browser, RecentJoinCodeEntry entry)
+    public void BindPublicSession(SessionBrowser browser, string sessionId, string sessionName, int currentPlayers, int maxPlayers, bool joinable)
     {
         _browser = browser;
-        _savedEntry = entry;
+        _sessionId = sessionId;
 
         if (_serverNameText != null)
-            _serverNameText.text = string.IsNullOrWhiteSpace(entry.Name) ? "Saved Session" : entry.Name;
+            _serverNameText.text = string.IsNullOrWhiteSpace(sessionName) ? "Unnamed Session" : sessionName;
 
         if (_serverIPText != null)
-            _serverIPText.text = string.IsNullOrWhiteSpace(entry.Code) ? "Code: ---" : $"Code: {entry.Code}";
+            _serverIPText.text = "Public Session";
 
-        SetRefreshing();
+        if (_serverStatusText != null)
+            _serverStatusText.text = joinable ? "Open" : "Full";
+
+        if (_serverPingText != null)
+            _serverPingText.text = "---";
+
+        if (_serverPlayerCountText != null)
+            _serverPlayerCountText.text = $"{Mathf.Max(0, currentPlayers)}/{Mathf.Max(1, maxPlayers)}";
+
+        if (_serverStatusImage != null)
+            _serverStatusImage.color = joinable ? _onlineColor : _offlineColor;
+
+        if (_serverPingImage != null)
+            _serverPingImage.color = _unknownColor;
 
         if (_joinButton != null)
         {
-            _joinButton.interactable = true;
+            _joinButton.interactable = joinable;
             _joinButton.onClick.RemoveAllListeners();
-            _joinButton.onClick.AddListener(OnClickJoinSavedCode);
+            _joinButton.onClick.AddListener(OnClickJoin);
         }
 
         if (_deleteButton != null)
         {
-            _deleteButton.gameObject.SetActive(true);
+            _deleteButton.gameObject.SetActive(false);
             _deleteButton.onClick.RemoveAllListeners();
-            _deleteButton.onClick.AddListener(OnClickDeleteSavedCode);
         }
     }
 
     public void SetRefreshing()
     {
         if (_serverStatusText != null) _serverStatusText.text = "Refreshing";
+        if (_serverPingText != null) _serverPingText.text = "---";
         if (_serverPlayerCountText != null) _serverPlayerCountText.text = "-/-";
 
         if (_serverStatusImage != null) _serverStatusImage.color = _unknownColor;
+        if (_serverPingImage != null) _serverPingImage.color = _unknownColor;
+
+        if (_joinButton != null)
+            _joinButton.interactable = false;
     }
 
-    public void SetOffline()
+    private void OnClickJoin()
     {
-        if (_serverStatusText != null) _serverStatusText.text = "Offline";
-        if (_serverPlayerCountText != null) _serverPlayerCountText.text = "-/-";
-
-        if (_serverStatusImage != null) _serverStatusImage.color = _offlineColor;
-    }
-
-    public void SetOnline(string reportedName, int currentPlayers, int maxPlayers)
-    {
-        if (_serverNameText != null)
-            _serverNameText.text = string.IsNullOrWhiteSpace(reportedName)
-                ? (string.IsNullOrWhiteSpace(_savedEntry?.Name) ? "Saved Session" : _savedEntry.Name)
-                : reportedName;
-
-        if (_serverStatusText != null) _serverStatusText.text = "Online";
-        if (_serverPlayerCountText != null) _serverPlayerCountText.text = $"{Mathf.Max(0, currentPlayers)}/{Mathf.Max(1, maxPlayers)}";
-
-        if (_serverStatusImage != null) _serverStatusImage.color = _onlineColor;
-    }
-
-    private void OnClickJoinSavedCode()
-    {
-        if (_browser != null && _savedEntry != null)
-            _browser.JoinSavedEntry(_savedEntry);
-    }
-
-    private void OnClickDeleteSavedCode()
-    {
-        if (_browser != null && _savedEntry != null)
-            _browser.RemoveEntry(_savedEntry);
+        if (_browser != null && !string.IsNullOrWhiteSpace(_sessionId))
+            _browser.JoinSessionById(_sessionId);
     }
 
     private void OnDestroy()

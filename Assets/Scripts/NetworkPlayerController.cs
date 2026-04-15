@@ -96,13 +96,22 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private void SetupLocalCamera()
     {
         _cam = Camera.main;
+
         if (_cam == null)
         {
-            Debug.LogWarning("[NetworkPlayerController] No main camera found.");
+            Debug.LogWarning($"[NetworkPlayerController] No main camera found on {name}. IsOwner={IsOwner}");
             return;
         }
+
         _camT = _cam.transform;
-        _camT.SetPositionAndRotation(_cameraTarget.position, _cameraTarget.rotation);
+        _localYRot = _t.eulerAngles.y;
+        _serverYaw = _t.eulerAngles.y;
+
+        Debug.Log(
+            $"[NetworkPlayerController] Camera setup on {name}. " +
+            $"Camera={_cam.name}, CameraTarget={(_cameraTarget != null ? _cameraTarget.name : "NULL")}, " +
+            $"IsOwner={IsOwner}, IsServer={IsServer}, OwnerClientId={OwnerClientId}"
+        );
     }
 
     private void UpdateCamera()
@@ -114,7 +123,17 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void LateUpdateCamera()
     {
-        if (_camT == null || _cameraTarget == null) return;
+        if (_camT == null)
+        {
+            Debug.LogWarning($"[NetworkPlayerController] _camT is null on {name}");
+            return;
+        }
+
+        if (_cameraTarget == null)
+        {
+            Debug.LogWarning($"[NetworkPlayerController] _cameraTarget is null on {name}");
+            return;
+        }
 
         Quaternion targetRot = Quaternion.Euler(_localXRot, _localYRot, 0f);
 

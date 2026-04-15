@@ -43,8 +43,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         _t = transform;
         _rb = GetComponent<Rigidbody>();
+        ToggleMouse();
     }
-
     public override void OnNetworkSpawn()
     {
         if (IsOwner)
@@ -54,10 +54,24 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             SetupLocalCamera();
         }
     }
-
     public override void OnNetworkDespawn()
     {
         if (IsOwner) _input?.Disable();
+    }
+    private void ToggleMouse()
+    {
+        if (!IsOwner) return;
+        switch (Cursor.lockState)
+        {
+            case CursorLockMode.None:
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+                break;
+            case CursorLockMode.Locked:
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+                break;
+        }
     }
     private void Update()
     {

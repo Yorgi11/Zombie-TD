@@ -167,9 +167,38 @@ public sealed class NetBootstrap : MonoBehaviour
     {
         Debug.Log($"[NetBootstrap] Client connected: {clientId}");
 
-        if (!_networkManager.IsServer || _gameSceneLoaded) return;
+        if (!_networkManager.IsServer) return;
 
-        LoadGameScene();
+        if (!_gameSceneLoaded)
+        {
+            LoadGameScene();
+            return;
+        }
+
+        if (SceneManager.GetActiveScene().name == "Game")
+        {
+            SpawnPlayerForClient(clientId);
+        }
+    }
+    private void SpawnPlayerForClient(ulong clientId)
+    {
+        if (_playerPrefab == null)
+        {
+            Debug.LogError("[NetBootstrap] Player prefab is not assigned.");
+            return;
+        }
+
+        if (_networkManager.SpawnManager.GetPlayerNetworkObject(clientId) != null)
+            return;
+
+        int playerIndex = _networkManager.ConnectedClientsIds.Count - 1;
+        Vector3 spawnPos = _spawnOrigin + new Vector3(playerIndex * _spawnSpacing, 1f, 0f);
+        Quaternion spawnRot = Quaternion.identity;
+
+        NetworkObject player = Instantiate(_playerPrefab, spawnPos, spawnRot);
+        player.SpawnAsPlayerObject(clientId, true);
+
+        Debug.Log($"[NetBootstrap] Spawned player for client {clientId}");
     }
 
     private void OnClientDisconnected(ulong clientId)
@@ -193,18 +222,9 @@ public sealed class NetBootstrap : MonoBehaviour
             return;
         }
 
-        int index = 0;
         foreach (ulong clientId in _networkManager.ConnectedClientsIds)
         {
-            if (_networkManager.SpawnManager.GetPlayerNetworkObject(clientId) != null)
-                continue;
-
-            Vector3 spawnPos = _spawnOrigin + new Vector3(index * _spawnSpacing, 1f, 0f);
-            Quaternion spawnRot = Quaternion.identity;
-
-            NetworkObject player = Instantiate(_playerPrefab, spawnPos, spawnRot);
-            player.SpawnAsPlayerObject(clientId, true);
-            index++;
+            SpawnPlayerForClient(clientId);
         }
     }
 }

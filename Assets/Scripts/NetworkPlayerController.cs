@@ -34,29 +34,80 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Camera _cam;
     private Transform _camT;
 
-    // Latest input accepted by the server
     private Vector2 _serverMoveInput;
     private Vector2 _serverLookInput;
     private MoveState _serverMoveState;
-    public override void OnNetworkSpawn()
+
+    private bool _networkInitialized;
+    private bool _localOwnerInitialized;
+
+    private void Awake()
     {
-        if (IsOwner)
-        {
-            _input ??= new();
-            _input.Enable();
-            SetupLocalCamera();
-        }
         _t = transform;
         _rb = GetComponent<Rigidbody>();
-        ToggleMouse();
     }
+
+    public override void OnNetworkSpawn()
+    {
+        InitializeNetworkState();
+    }
+
+    public override void OnGainedOwnership()
+    {
+        InitializeNetworkState();
+    }
+
     public override void OnNetworkDespawn()
     {
-        if (IsOwner) _input?.Disable();
+        CleanupLocalOwnerState();
+        _networkInitialized = false;
     }
+
+    public override void OnLostOwnership()
+    {
+        CleanupLocalOwnerState();
+    }
+
+    private void InitializeNetworkState()
+    {
+        if (!IsSpawned) return;
+
+        if (!_networkInitialized)
+        {
+            _networkInitialized = true;
+        }
+
+        if (IsOwner && !_localOwnerInitialized)
+        {
+            _localOwnerInitialized = true;
+
+            _input ??= new();
+            _input.Enable();
+
+            ToggleMouse();
+            SetupLocalCamera();
+        }
+    }
+
+    private void CleanupLocalOwnerState()
+    {
+        if (!_localOwnerInitialized) return;
+
+        _localOwnerInitialized = false;
+        _input?.Disable();
+
+        if (IsOwner)
+        { 
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+
+        _cam = null;
+        _camT = null;
+    }
+
     private void ToggleMouse()
     {
-        if (!IsOwner) return;
         switch (Cursor.lockState)
         {
             case CursorLockMode.None:
@@ -69,12 +120,18 @@ public sealed class NetworkPlayerController : NetworkBehaviour
                 break;
         }
     }
+
     private void Update()
     {
-        if (!IsOwner) return;
+        if (!IsSpawned || !IsOwner || !_localOwnerInitialized) return;
+
         _moveInput = _input.Player.Move.ReadValue<Vector2>();
         _lookInput = _input.Player.Look.ReadValue<Vector2>();
-        MoveState moveState = _input.Player.Crouch.IsPressed() ? MoveState.Crouch : _input.Player.Sprint.IsPressed() ? MoveState.Running : MoveState.Walking;
+
+        MoveState moveState =
+            _input.Player.Crouch.IsPressed() ? MoveState.Crouch :
+            _input.Player.Sprint.IsPressed() ? MoveState.Running :
+            MoveState.Walking;
 
         UpdateCamera();
         SubmitInputToServer(moveState);
@@ -82,7 +139,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void FixedUpdate()
     {
-        if (!IsServer) return;
+        if (!IsSpawned || !IsServer) return;
 
         FixedUpdateServerRotation();
         FixedUpdateMovement();
@@ -90,7 +147,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void LateUpdate()
     {
-        if (!IsOwner) return;
+        if (!IsSpawned || !IsOwner || !_localOwnerInitialized) return;
         LateUpdateCamera();
     }
 
@@ -104,13 +161,21 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             return;
         }
 
+        if (_cameraTarget == null)
+        {
+            Debug.LogWarning($"[NetworkPlayerController] _cameraTarget is null on {name}");
+            return;
+        }
+
         _camT = _cam.transform;
         _localYRot = _t.eulerAngles.y;
         _serverYaw = _t.eulerAngles.y;
 
+        _camT.SetPositionAndRotation(_cameraTarget.position, Quaternion.Euler(_localXRot, _localYRot, 0f));
+
         Debug.Log(
-            $"[NetworkPlayerController] Camera setup on {name}. " +
-            $"Camera={_cam.name}, CameraTarget={(_cameraTarget != null ? _cameraTarget.name : "NULL")}, " +
+            $"[NetworkPlayerController] Local owner init on {name}. " +
+            $"Camera={_cam.name}, CameraTarget={_cameraTarget.name}, " +
             $"IsOwner={IsOwner}, IsServer={IsServer}, OwnerClientId={OwnerClientId}"
         );
     }
@@ -124,17 +189,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void LateUpdateCamera()
     {
-        if (_camT == null)
-        {
-            Debug.LogWarning($"[NetworkPlayerController] _camT is null on {name}");
-            return;
-        }
-
-        if (_cameraTarget == null)
-        {
-            Debug.LogWarning($"[NetworkPlayerController] _cameraTarget is null on {name}");
-            return;
-        }
+        if (_camT == null || _cameraTarget == null) return;
 
         Quaternion targetRot = Quaternion.Euler(_localXRot, _localYRot, 0f);
 
@@ -148,6 +203,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         _t.rotation = Quaternion.Euler(0f, _serverYaw, 0f);
     }
+
     private void FixedUpdateMovement()
     {
         Vector3 moveDir = (_t.forward * _serverMoveInput.y + _t.right * _serverMoveInput.x);
@@ -161,6 +217,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         _rb.AddForce(accel, ForceMode.Acceleration);
     }
+
     private void SubmitInputToServer(MoveState moveState)
     {
         Vector2 clampedMove = Vector2.ClampMagnitude(_moveInput, 1f);
@@ -174,16 +231,26 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             ApplyInputAuthoritative(clampedMove, clampedLook, (int)moveState, _localYRot);
             return;
         }
+
         SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _localYRot);
     }
+
     private void ApplyInputAuthoritative(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
     {
-        if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length) moveStateIndex = (int)MoveState.Walking;
+        moveInput = Vector2.ClampMagnitude(moveInput, 1f);
+
+        lookInput.x = Mathf.Clamp(lookInput.x, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+        lookInput.y = Mathf.Clamp(lookInput.y, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+
+        if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length)
+            moveStateIndex = (int)MoveState.Walking;
+
         _serverMoveInput = moveInput;
         _serverLookInput = lookInput;
         _serverMoveState = (MoveState)moveStateIndex;
         _serverYaw = yaw;
     }
+
     [ServerRpc]
     private void SubmitInputServerRpc(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
     {

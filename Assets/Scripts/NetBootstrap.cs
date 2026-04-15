@@ -49,7 +49,6 @@ public sealed class NetBootstrap : MonoBehaviour
         _networkManager.OnClientConnectedCallback += OnClientConnected;
         _networkManager.OnClientDisconnectCallback += OnClientDisconnected;
         _networkManager.OnServerStarted += OnServerStarted;
-        _networkManager.SceneManager.OnLoadEventCompleted += OnLoadEventCompleted;
     }
 
     private void OnDestroy()
@@ -60,7 +59,7 @@ public sealed class NetBootstrap : MonoBehaviour
             _networkManager.OnClientDisconnectCallback -= OnClientDisconnected;
             _networkManager.OnServerStarted -= OnServerStarted;
 
-            if (_networkManager.SceneManager != null)
+            if (_networkManager != null && _networkManager.SceneManager != null)
                 _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
         }
 
@@ -144,6 +143,16 @@ public sealed class NetBootstrap : MonoBehaviour
     private void OnServerStarted()
     {
         Debug.Log("[NetBootstrap] Server started callback.");
+
+        if (_networkManager.SceneManager != null)
+        {
+            _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
+            _networkManager.SceneManager.OnLoadEventCompleted += OnLoadEventCompleted;
+        }
+        else
+        {
+            Debug.LogError("[NetBootstrap] NetworkSceneManager is null after server start.");
+        }
     }
 
     private void OnClientConnected(ulong clientId)

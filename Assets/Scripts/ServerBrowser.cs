@@ -148,7 +148,10 @@ public sealed class ServerBrowser : MonoBehaviour
                     ui.RefreshStatic();
                     ui.SetOnline(result.Response, result.PingMs);
                 }
-                else ui.SetOffline();
+                else
+                {
+                    ui.SetOffline();
+                }
             }
 
             if (anyNameChanged)

@@ -22,7 +22,7 @@ public sealed class NetBootstrap : MonoBehaviour
     [Header("Server Browser Status")]
     [SerializeField] private string _serverDisplayName = "Unity Server";
     [SerializeField] private ushort _statusPortOffset = 1;
-    [SerializeField] private int _maxBrowserPlayers = 4;
+    [SerializeField] private int _maxBrowserPlayers = 8;
 
     [Header("Player Spawning")]
     [SerializeField] private NetworkObject _playerPrefab;
@@ -94,12 +94,23 @@ public sealed class NetBootstrap : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    public void SetServerDisplayName(string serverName)
+    {
+        _serverDisplayName = string.IsNullOrWhiteSpace(serverName) ? "Unity Server" : serverName.Trim();
+    }
+
     public void StartHost()
     {
         ShutdownIfRunning();
         _transport.SetConnectionData("0.0.0.0", _port);
         bool success = _networkManager.StartHost();
         Debug.Log(success ? $"[NetBootstrap] Host started on port {_port}." : "[NetBootstrap] Failed to start host.");
+    }
+
+    public void StartHost(string serverName)
+    {
+        SetServerDisplayName(serverName);
+        StartHost();
     }
 
     public void StartClient(string ip)

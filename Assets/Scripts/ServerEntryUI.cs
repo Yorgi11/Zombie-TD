@@ -89,11 +89,12 @@ public sealed class ServerEntryUI : MonoBehaviour
     {
         if (_serverNameText != null)
         {
-            string displayName = !string.IsNullOrWhiteSpace(_entry?.Name)
-                ? _entry.Name
-                : !string.IsNullOrWhiteSpace(response?.Name)
+            string displayName =
+                !string.IsNullOrWhiteSpace(response?.Name)
                     ? response.Name
-                    : "Unknown Server";
+                    : !string.IsNullOrWhiteSpace(_entry?.Name)
+                        ? _entry.Name
+                        : "Unknown Server";
 
             _serverNameText.text = displayName;
         }

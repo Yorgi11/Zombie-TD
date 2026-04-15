@@ -34,9 +34,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Camera _cam;
     private Transform _camT;
 
-    // Latest input accepted by the server
     private Vector2 _serverMoveInput;
-    private Vector2 _serverLookInput;
     private MoveState _serverMoveState;
 
     private void Awake()
@@ -47,20 +45,17 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        if (IsOwner)
-        {
-            _input ??= new();
-            _input.Enable();
-            SetupLocalCamera();
-        }
+        if (!IsOwner) return;
+
+        _input ??= new();
+        _input.Enable();
+        SetupLocalCamera();
     }
 
     public override void OnNetworkDespawn()
     {
-        if (IsOwner)
-        {
-            _input?.Disable();
-        }
+        if (!IsOwner) return;
+        _input?.Disable();
     }
 
     private void Update()
@@ -96,10 +91,15 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private void SetupLocalCamera()
     {
         _cam = Camera.main;
-
         if (_cam == null)
         {
-            Debug.LogWarning($"[NetworkPlayerController] No main camera found on {name}. IsOwner={IsOwner}");
+            Debug.LogWarning("[NetworkPlayerController] No main camera found.");
+            return;
+        }
+
+        if (_cameraTarget == null)
+        {
+            Debug.LogError("[NetworkPlayerController] Camera target is not assigned.");
             return;
         }
 
@@ -107,11 +107,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _localYRot = _t.eulerAngles.y;
         _serverYaw = _t.eulerAngles.y;
 
-        Debug.Log(
-            $"[NetworkPlayerController] Camera setup on {name}. " +
-            $"Camera={_cam.name}, CameraTarget={(_cameraTarget != null ? _cameraTarget.name : "NULL")}, " +
-            $"IsOwner={IsOwner}, IsServer={IsServer}, OwnerClientId={OwnerClientId}"
-        );
+        LateUpdateCamera();
     }
 
     private void UpdateCamera()
@@ -123,20 +119,9 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void LateUpdateCamera()
     {
-        if (_camT == null)
-        {
-            Debug.LogWarning($"[NetworkPlayerController] _camT is null on {name}");
-            return;
-        }
-
-        if (_cameraTarget == null)
-        {
-            Debug.LogWarning($"[NetworkPlayerController] _cameraTarget is null on {name}");
-            return;
-        }
+        if (_camT == null || _cameraTarget == null) return;
 
         Quaternion targetRot = Quaternion.Euler(_localXRot, _localYRot, 0f);
-
         _camT.SetPositionAndRotation(
             _cameraTarget.position,
             Quaternion.Slerp(_camT.rotation, targetRot, _animationCamShake)
@@ -178,11 +163,18 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _localYRot);
     }
+
     private void ApplyInputAuthoritative(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
     {
-        if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length) moveStateIndex = (int)MoveState.Walking;
+        moveInput = Vector2.ClampMagnitude(moveInput, 1f);
+
+        lookInput.x = Mathf.Clamp(lookInput.x, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+        lookInput.y = Mathf.Clamp(lookInput.y, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
+
+        if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length)
+            moveStateIndex = (int)MoveState.Walking;
+
         _serverMoveInput = moveInput;
-        _serverLookInput = lookInput;
         _serverMoveState = (MoveState)moveStateIndex;
         _serverYaw = yaw;
     }

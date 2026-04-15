@@ -38,13 +38,6 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Vector2 _serverMoveInput;
     private Vector2 _serverLookInput;
     private MoveState _serverMoveState;
-
-    private void Awake()
-    {
-        _t = transform;
-        _rb = GetComponent<Rigidbody>();
-        ToggleMouse();
-    }
     public override void OnNetworkSpawn()
     {
         if (IsOwner)
@@ -53,6 +46,9 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             _input.Enable();
             SetupLocalCamera();
         }
+        _t = transform;
+        _rb = GetComponent<Rigidbody>();
+        ToggleMouse();
     }
     public override void OnNetworkDespawn()
     {

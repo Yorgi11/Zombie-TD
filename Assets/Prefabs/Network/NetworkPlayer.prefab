@@ -164,7 +164,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 4065324306
+  GlobalObjectIdHash: 773038363
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -285,7 +285,7 @@ MonoBehaviour:
   - 3
   - 5
   - 10
-  _jumpHeight: 2
+  _jumpHeight: 1.25
   _groundCheckRadius: 0.5
   _groundCheckOffset: -0.4
   _groundSnapOffset: -0.5

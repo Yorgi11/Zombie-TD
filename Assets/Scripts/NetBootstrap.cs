@@ -1,9 +1,14 @@
 using System.Collections.Generic;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using TMPro;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+
 [RequireComponent(typeof(NetworkManager))]
 [RequireComponent(typeof(UnityTransport))]
 public sealed class NetBootstrap : MonoBehaviour
@@ -14,6 +19,11 @@ public sealed class NetBootstrap : MonoBehaviour
     [SerializeField] private string _defaultIP = "127.0.0.1";
     [SerializeField] private ushort _port = 7777;
 
+    [Header("Server Browser Status")]
+    [SerializeField] private string _serverDisplayName = "Unity Server";
+    [SerializeField] private ushort _statusPortOffset = 1;
+    [SerializeField] private int _maxBrowserPlayers = 4;
+
     [Header("Player Spawning")]
     [SerializeField] private NetworkObject _playerPrefab;
     [SerializeField] private Vector3 _spawnOrigin = Vector3.zero;
@@ -23,9 +33,15 @@ public sealed class NetBootstrap : MonoBehaviour
     private UnityTransport _transport;
     private bool _gameSceneLoaded;
 
+    private UdpClient _statusResponder;
+    private CancellationTokenSource _statusResponderCts;
+    private Task _statusResponderTask;
+
     public string DefaultIP => _defaultIP;
     public ushort Port => _port;
     public bool IsOnline => _networkManager != null && _networkManager.IsListening;
+
+    private ushort StatusPort => (ushort)(_port + _statusPortOffset);
 
     private void Awake()
     {
@@ -52,6 +68,7 @@ public sealed class NetBootstrap : MonoBehaviour
         _networkManager.OnServerStarted += OnServerStarted;
         _networkManager.ConnectionApprovalCallback = ApprovalCheck;
     }
+
     private void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
     {
         response.Approved = true;
@@ -61,6 +78,8 @@ public sealed class NetBootstrap : MonoBehaviour
 
     private void OnDestroy()
     {
+        StopStatusResponder();
+
         if (_networkManager != null)
         {
             _networkManager.OnClientConnectedCallback -= OnClientConnected;
@@ -68,8 +87,10 @@ public sealed class NetBootstrap : MonoBehaviour
             _networkManager.OnServerStarted -= OnServerStarted;
             _networkManager.ConnectionApprovalCallback = null;
 
-            if (_networkManager != null && _networkManager.SceneManager != null) _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
+            if (_networkManager.SceneManager != null)
+                _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
         }
+
         if (Instance == this) Instance = null;
     }
 
@@ -80,6 +101,7 @@ public sealed class NetBootstrap : MonoBehaviour
         bool success = _networkManager.StartHost();
         Debug.Log(success ? $"[NetBootstrap] Host started on port {_port}." : "[NetBootstrap] Failed to start host.");
     }
+
     public void StartClient(string ip)
     {
         ShutdownIfRunning();
@@ -115,7 +137,10 @@ public sealed class NetBootstrap : MonoBehaviour
     public void ShutdownIfRunning()
     {
         _gameSceneLoaded = false;
-        if (_networkManager != null && _networkManager.IsListening) _networkManager.Shutdown();
+        StopStatusResponder();
+
+        if (_networkManager != null && _networkManager.IsListening)
+            _networkManager.Shutdown();
     }
 
     public void LoadGameScene()
@@ -128,24 +153,33 @@ public sealed class NetBootstrap : MonoBehaviour
     private void OnServerStarted()
     {
         Debug.Log("[NetBootstrap] Server started callback.");
+
         if (_networkManager.SceneManager != null)
         {
             _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
             _networkManager.SceneManager.OnLoadEventCompleted += OnLoadEventCompleted;
         }
-        else Debug.LogError("[NetBootstrap] NetworkSceneManager is null after server start.");
+        else
+        {
+            Debug.LogError("[NetBootstrap] NetworkSceneManager is null after server start.");
+        }
+
+        StartStatusResponder();
     }
 
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"[NetBootstrap] Client connected: {clientId}");
         if (!_networkManager.IsServer) return;
+
         if (!_gameSceneLoaded)
         {
             LoadGameScene();
             return;
         }
-        if (SceneManager.GetActiveScene().name == "Game") SpawnPlayerForClient(clientId);
+
+        if (SceneManager.GetActiveScene().name == "Game")
+            SpawnPlayerForClient(clientId);
     }
 
     private void OnClientDisconnected(ulong clientId)
@@ -159,6 +193,7 @@ public sealed class NetBootstrap : MonoBehaviour
         if (sceneName != "Game") return;
         SpawnPlayersForConnectedClients();
     }
+
     private void SpawnPlayersForConnectedClients()
     {
         if (_playerPrefab == null)
@@ -166,11 +201,11 @@ public sealed class NetBootstrap : MonoBehaviour
             Debug.LogError("[NetBootstrap] Player prefab is not assigned.");
             return;
         }
+
         foreach (ulong clientId in _networkManager.ConnectedClientsIds)
-        {
             SpawnPlayerForClient(clientId);
-        }
     }
+
     private void SpawnPlayerForClient(ulong clientId)
     {
         if (_playerPrefab == null)
@@ -178,6 +213,7 @@ public sealed class NetBootstrap : MonoBehaviour
             Debug.LogError("[NetBootstrap] Player prefab is not assigned.");
             return;
         }
+
         if (_networkManager.SpawnManager.GetPlayerNetworkObject(clientId) != null) return;
 
         Vector3 spawnPos = _spawnOrigin + new Vector3((_networkManager.ConnectedClientsIds.Count - 1) * _spawnSpacing, 1f, 0f);
@@ -185,5 +221,73 @@ public sealed class NetBootstrap : MonoBehaviour
         player.SpawnAsPlayerObject(clientId, true);
 
         Debug.Log($"[NetBootstrap] Spawned player for client {clientId}");
+    }
+
+    private void StartStatusResponder()
+    {
+        StopStatusResponder();
+
+        try
+        {
+            _statusResponder = new UdpClient(StatusPort);
+            _statusResponderCts = new CancellationTokenSource();
+            _statusResponderTask = RunStatusResponderAsync(_statusResponderCts.Token);
+
+            Debug.Log($"[NetBootstrap] Status responder listening on UDP {StatusPort}");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[NetBootstrap] Failed to start status responder.\n{e}");
+        }
+    }
+
+    private void StopStatusResponder()
+    {
+        try
+        {
+            _statusResponderCts?.Cancel();
+            _statusResponder?.Close();
+            _statusResponder?.Dispose();
+        }
+        catch { }
+
+        _statusResponder = null;
+        _statusResponderCts = null;
+        _statusResponderTask = null;
+    }
+
+    private async Task RunStatusResponderAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested && _statusResponder != null)
+        {
+            try
+            {
+                Task<UdpReceiveResult> receiveTask = _statusResponder.ReceiveAsync();
+                Task completed = await Task.WhenAny(receiveTask, Task.Delay(-1, token));
+                if (completed != receiveTask) break;
+
+                UdpReceiveResult packet = receiveTask.Result;
+                string json = Encoding.UTF8.GetString(packet.Buffer);
+
+                ServerStatusRequest request = JsonUtility.FromJson<ServerStatusRequest>(json);
+                if (request == null || request.Type != "status")
+                    continue;
+
+                ServerStatusResponse response = new()
+                {
+                    Name = _serverDisplayName,
+                    CurrentPlayers = _networkManager != null ? _networkManager.ConnectedClientsIds.Count : 0,
+                    MaxPlayers = Mathf.Max(1, _maxBrowserPlayers)
+                };
+
+                string responseJson = JsonUtility.ToJson(response);
+                byte[] responseBytes = Encoding.UTF8.GetBytes(responseJson);
+                await _statusResponder.SendAsync(responseBytes, responseBytes.Length, packet.RemoteEndPoint);
+            }
+            catch
+            {
+                if (token.IsCancellationRequested) break;
+            }
+        }
     }
 }

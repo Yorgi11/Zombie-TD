@@ -283,7 +283,7 @@ MonoBehaviour:
   _moveAcceleration: 6
   _moveSpeeds:
   - 3
-  - 5
+  - 6
   - 10
   _jumpHeight: 1.25
   _groundCheckRadius: 0.5
@@ -293,7 +293,7 @@ MonoBehaviour:
   _groundMask:
     serializedVersion: 2
     m_Bits: 1
-  _mouseSensitivity: 100
+  _mouseSensitivity: 80
   _camLimits: {x: -80, y: 80}
   _cameraTarget: {fileID: 7847171445600904104}
   _animationCamShake: 1

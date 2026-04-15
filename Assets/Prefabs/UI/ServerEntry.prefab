@@ -1365,6 +1365,10 @@ MonoBehaviour:
   _joinButton: {fileID: 8488326614085986522}
   _onlineColor: {r: 0, g: 1, b: 0, a: 1}
   _offlineColor: {r: 1, g: 0, b: 0, a: 1}
+  _unknownColor: {r: 0.5471698, g: 0.5471698, b: 0.5471698, a: 1}
+  _unknownServerName: Unknown Server
+  _offlineStatusText: Offline
+  _onlineStatusText: Online
 --- !u!1 &9171254676437568225
 GameObject:
   m_ObjectHideFlags: 0

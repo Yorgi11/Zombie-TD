@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 3763765522700567103}
   - component: {fileID: 7507126521610883482}
   - component: {fileID: 7850530870775195744}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Capsule
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -128,7 +128,7 @@ GameObject:
   - component: {fileID: 2857115100470630678}
   - component: {fileID: 2538536194087112997}
   - component: {fileID: 1271621156648707071}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: NetworkPlayer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -285,6 +285,14 @@ MonoBehaviour:
   - 3
   - 5
   - 10
+  _jumpHeight: 2
+  _groundCheckRadius: 0.5
+  _groundCheckOffset: -0.4
+  _groundSnapOffset: -0.5
+  _jumpBufferTime: 0.15
+  _groundMask:
+    serializedVersion: 2
+    m_Bits: 1
   _mouseSensitivity: 100
   _camLimits: {x: -80, y: 80}
   _cameraTarget: {fileID: 7847171445600904104}
@@ -299,7 +307,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7847171445600904104}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: CameraTarget
   m_TagString: Untagged
   m_Icon: {fileID: 0}

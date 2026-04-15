@@ -66,8 +66,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         _t = transform;
         _rb = GetComponent<Rigidbody>();
-        if (gameObject.TryGetComponentInChildren<CapsuleCollider>(out _capsule)) return;
-        else Debug.LogWarning($"[NetworkPlayerController] No capsule found on or in children of {name}. IsOwner={IsOwner}");
+
+        if (!gameObject.TryGetComponentInChildren(out _capsule)) Debug.LogWarning($"[NetworkPlayerController] No capsule found on or in children of {name}.");
     }
 
     public override void OnNetworkSpawn()
@@ -253,17 +253,17 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private bool CheckGround(out Vector3 groundPoint)
     {
-        float halfHeight = 1f;
-        float radius = 0.5f;
-
-        if (_capsule != null)
-        {
-            halfHeight = _capsule.height * 0.5f * Mathf.Abs(_t.localScale.y);
-            radius = _capsule.radius * Mathf.Max(Mathf.Abs(_t.localScale.x), Mathf.Abs(_t.localScale.z));
-        }
-
-        Vector3 sphereCenter = _t.position + Vector3.down * Mathf.Max(0f, halfHeight - radius + _groundCheckOffset);
         groundPoint = _t.position;
+
+        if (_capsule == null) return false;
+
+        Bounds b = _capsule.bounds;
+
+        Vector3 sphereCenter = new(
+            b.center.x,
+            b.min.y - _groundCheckOffset,
+            b.center.z
+        );
 
         int hitCount = Physics.OverlapSphereNonAlloc(
             sphereCenter,
@@ -282,6 +282,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         {
             Collider col = _groundHits[i];
             if (col == null) continue;
+            if (col == _capsule) continue;
+            if (col.transform.IsChildOf(_t)) continue;
             if (col.attachedRigidbody == _rb) continue;
 
             Vector3 closest = col.ClosestPoint(sphereCenter);
@@ -332,11 +334,14 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void SnapToGround(Vector3 groundPoint)
     {
-        float halfHeight = 1f;
-        if (_capsule != null) halfHeight = _capsule.height * 0.5f * Mathf.Abs(_t.localScale.y);
+        if (_capsule == null) return;
+
+        float currentBottomY = _capsule.bounds.min.y;
+        float targetBottomY = groundPoint.y + _groundSnapOffset;
+        float deltaY = targetBottomY - currentBottomY;
 
         Vector3 pos = _rb.position;
-        pos.y = groundPoint.y + halfHeight + _groundSnapOffset;
+        pos.y += deltaY;
         _rb.position = pos;
     }
 
@@ -380,5 +385,21 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private void SubmitInputServerRpc(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw, bool jumpHeld, bool jumpPressedThisFrame)
     {
         ApplyInputAuthoritative(moveInput, lookInput, moveStateIndex, yaw, jumpHeld, jumpPressedThisFrame);
+    }
+    private void OnDrawGizmosSelected()
+    {
+        CapsuleCollider capsule = GetComponentInChildren<CapsuleCollider>();
+        if (capsule == null) return;
+
+        Bounds b = capsule.bounds;
+
+        Vector3 sphereCenter = new(
+            b.center.x,
+            b.min.y - _groundCheckOffset,
+            b.center.z
+        );
+
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(sphereCenter, _groundCheckRadius);
     }
 }

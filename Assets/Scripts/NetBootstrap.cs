@@ -49,6 +49,13 @@ public sealed class NetBootstrap : MonoBehaviour
         _networkManager.OnClientConnectedCallback += OnClientConnected;
         _networkManager.OnClientDisconnectCallback += OnClientDisconnected;
         _networkManager.OnServerStarted += OnServerStarted;
+        _networkManager.ConnectionApprovalCallback = ApprovalCheck;
+    }
+    private void ApprovalCheck(NetworkManager.ConnectionApprovalRequest request, NetworkManager.ConnectionApprovalResponse response)
+    {
+        response.Approved = true;
+        response.CreatePlayerObject = false;
+        response.Pending = false;
     }
 
     private void OnDestroy()
@@ -58,6 +65,7 @@ public sealed class NetBootstrap : MonoBehaviour
             _networkManager.OnClientConnectedCallback -= OnClientConnected;
             _networkManager.OnClientDisconnectCallback -= OnClientDisconnected;
             _networkManager.OnServerStarted -= OnServerStarted;
+            _networkManager.ConnectionApprovalCallback = null;
 
             if (_networkManager != null && _networkManager.SceneManager != null)
                 _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;

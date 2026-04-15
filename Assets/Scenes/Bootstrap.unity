@@ -1273,7 +1273,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NetBootstrap
   _defaultIP: 127.0.0.1
   _port: 7777
-  _playerPrefab: {fileID: 0}
+  _playerPrefab: {fileID: 112565040871412906, guid: feca7961c8757ad418650c7716b1acb5, type: 3}
   _spawnOrigin: {x: 0, y: 0, z: 0}
   _spawnSpacing: 3
 --- !u!114 &598671972

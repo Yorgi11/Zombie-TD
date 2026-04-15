@@ -57,23 +57,14 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
-        if (IsOwner)
-        {
-            _input?.Disable();
-        }
+        if (IsOwner) _input?.Disable();
     }
-
     private void Update()
     {
         if (!IsOwner) return;
-
         _moveInput = _input.Player.Move.ReadValue<Vector2>();
         _lookInput = _input.Player.Look.ReadValue<Vector2>();
-
-        MoveState moveState =
-            _input.Player.Crouch.IsPressed() ? MoveState.Crouch :
-            _input.Player.Sprint.IsPressed() ? MoveState.Running :
-            MoveState.Walking;
+        MoveState moveState = _input.Player.Crouch.IsPressed() ? MoveState.Crouch : _input.Player.Sprint.IsPressed() ? MoveState.Running : MoveState.Walking;
 
         UpdateCamera();
         SubmitInputToServer(moveState);
@@ -147,7 +138,6 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         _t.rotation = Quaternion.Euler(0f, _serverYaw, 0f);
     }
-
     private void FixedUpdateMovement()
     {
         Vector3 moveDir = (_t.forward * _serverMoveInput.y + _t.right * _serverMoveInput.x);
@@ -161,7 +151,6 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         _rb.AddForce(accel, ForceMode.Acceleration);
     }
-
     private void SubmitInputToServer(MoveState moveState)
     {
         Vector2 clampedMove = Vector2.ClampMagnitude(_moveInput, 1f);
@@ -175,7 +164,6 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             ApplyInputAuthoritative(clampedMove, clampedLook, (int)moveState, _localYRot);
             return;
         }
-
         SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _localYRot);
     }
     private void ApplyInputAuthoritative(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
@@ -186,7 +174,6 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _serverMoveState = (MoveState)moveStateIndex;
         _serverYaw = yaw;
     }
-
     [ServerRpc]
     private void SubmitInputServerRpc(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
     {

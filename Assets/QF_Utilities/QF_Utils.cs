@@ -220,6 +220,59 @@ namespace QF_Tools.QF_Utilities
         public static float MapRangeto01(float value, float min, float max)
         {
             return (value - min) / (max - min);
+
+        }
+            public static Quaternion[] Vector3ArrayToQuaternionArray(Vector3[] vectors)
+        {
+            if (vectors == null) return null;
+            Quaternion[] quaternions = new Quaternion[vectors.Length];
+            for (int i = 0; i < vectors.Length; i++)
+                quaternions[i] = Quaternion.Euler(vectors[i]);
+            return quaternions;
+        }
+        public static bool TryGetComponentInParent<T>(this Component start, out T component) where T : Component
+        {
+            Transform t = start.transform;
+            while (t != null)
+            {
+                if (t.TryGetComponent(out component)) return true;
+                t = t.parent;
+            }
+            component = null;
+            return false;
+        }
+        public static bool TryGetComponentInParent<T>(this GameObject start, out T component) where T : Component
+        {
+            Transform t = start.transform;
+            while (t != null)
+            {
+                if (t.TryGetComponent(out component)) return true;
+                t = t.parent;
+            }
+            component = null;
+            return false;
+        }
+        public static bool TryGetComponentInChildren<T>(this GameObject start, out T component) where T : Component
+        {
+            Transform root = start.transform;
+            if (root.TryGetComponent(out component)) return true;
+            Stack<Transform> stack = new();
+            for (int i = 0; i < root.childCount; i++)
+                stack.Push(root.GetChild(i));
+            while (stack.Count > 0)
+            {
+                Transform t = stack.Pop();
+                if (t.TryGetComponent(out component)) return true;
+                for (int i = 0; i < t.childCount; i++)
+                    stack.Push(t.GetChild(i));
+            }
+            component = null;
+            return false;
+        }
+        public static void ClearArray<T>(this T[] array)
+        {
+            if (array == null) return;
+            Array.Clear(array, 0, array.Length);
         }
     }
     public class QF_Input

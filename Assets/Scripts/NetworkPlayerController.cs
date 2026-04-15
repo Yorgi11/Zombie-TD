@@ -1,6 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
-
+using QF_Tools.QF_Utilities;
 [RequireComponent(typeof(Rigidbody))]
 public sealed class NetworkPlayerController : NetworkBehaviour
 {
@@ -9,6 +9,14 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     [Header("Movement")]
     [SerializeField] private float _moveAcceleration = 30f;
     [SerializeField] private float[] _moveSpeeds = new float[3] { 3f, 5f, 10f };
+
+    [Header("Jump")]
+    [SerializeField] private float _jumpHeight = 2f;
+    [SerializeField] private float _groundCheckRadius = 0.25f;
+    [SerializeField] private float _groundCheckOffset = 0.95f;
+    [SerializeField] private float _groundSnapOffset = 1f;
+    [SerializeField] private float _jumpBufferTime = 0.15f;
+    [SerializeField] private LayerMask _groundMask = ~0;
 
     [Header("Camera")]
     [SerializeField] private float _mouseSensitivity = 12f;
@@ -23,9 +31,13 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private Transform _t;
     private Rigidbody _rb;
+    private CapsuleCollider _capsule;
 
     private Vector2 _moveInput;
     private Vector2 _lookInput;
+
+    private bool _jumpHeld;
+    private bool _jumpPressedThisFrame;
 
     private float _localXRot;
     private float _localYRot;
@@ -38,13 +50,24 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Vector2 _serverLookInput;
     private MoveState _serverMoveState;
 
+    private bool _serverJumpHeld;
+    private bool _serverJumpPressedThisFrame;
+    private float _serverJumpBufferCounter;
+    private bool _serverIsGrounded;
+    private bool _serverWasGrounded;
+    private bool _serverJumpConsumedSinceGrounded;
+
     private bool _networkInitialized;
     private bool _localOwnerInitialized;
+
+    private readonly Collider[] _groundHits = new Collider[8];
 
     private void Awake()
     {
         _t = transform;
         _rb = GetComponent<Rigidbody>();
+        if (gameObject.TryGetComponentInChildren<CapsuleCollider>(out _capsule)) return;
+        else Debug.LogWarning($"[NetworkPlayerController] No capsule found on or in children of {name}. IsOwner={IsOwner}");
     }
 
     public override void OnNetworkSpawn()
@@ -72,10 +95,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         if (!IsSpawned) return;
 
-        if (!_networkInitialized)
-        {
-            _networkInitialized = true;
-        }
+        if (!_networkInitialized) _networkInitialized = true;
 
         if (IsOwner && !_localOwnerInitialized)
         {
@@ -97,7 +117,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _input?.Disable();
 
         if (IsOwner)
-        { 
+        {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
@@ -127,6 +147,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         _moveInput = _input.Player.Move.ReadValue<Vector2>();
         _lookInput = _input.Player.Look.ReadValue<Vector2>();
+        _jumpHeld = _input.Player.Jump.IsPressed();
+        _jumpPressedThisFrame = _input.Player.Jump.WasPressedThisFrame();
 
         MoveState moveState =
             _input.Player.Crouch.IsPressed() ? MoveState.Crouch :
@@ -140,6 +162,9 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private void FixedUpdate()
     {
         if (!IsSpawned || !IsServer) return;
+
+        UpdateGrounding();
+        HandleJump();
 
         FixedUpdateServerRotation();
         FixedUpdateMovement();
@@ -218,6 +243,103 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _rb.AddForce(accel, ForceMode.Acceleration);
     }
 
+    private void UpdateGrounding()
+    {
+        _serverWasGrounded = _serverIsGrounded;
+        _serverIsGrounded = CheckGround(out _);
+
+        if (_serverIsGrounded && !_serverWasGrounded) _serverJumpConsumedSinceGrounded = false;
+    }
+
+    private bool CheckGround(out Vector3 groundPoint)
+    {
+        float halfHeight = 1f;
+        float radius = 0.5f;
+
+        if (_capsule != null)
+        {
+            halfHeight = _capsule.height * 0.5f * Mathf.Abs(_t.localScale.y);
+            radius = _capsule.radius * Mathf.Max(Mathf.Abs(_t.localScale.x), Mathf.Abs(_t.localScale.z));
+        }
+
+        Vector3 sphereCenter = _t.position + Vector3.down * Mathf.Max(0f, halfHeight - radius + _groundCheckOffset);
+        groundPoint = _t.position;
+
+        int hitCount = Physics.OverlapSphereNonAlloc(
+            sphereCenter,
+            _groundCheckRadius,
+            _groundHits,
+            _groundMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        if (hitCount <= 0) return false;
+
+        float bestDistance = float.MaxValue;
+        bool foundGround = false;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider col = _groundHits[i];
+            if (col == null) continue;
+            if (col.attachedRigidbody == _rb) continue;
+
+            Vector3 closest = col.ClosestPoint(sphereCenter);
+            float dist = Vector3.Distance(sphereCenter, closest);
+
+            if (dist < bestDistance)
+            {
+                bestDistance = dist;
+                groundPoint = closest;
+                foundGround = true;
+            }
+        }
+
+        return foundGround;
+    }
+
+    private void HandleJump()
+    {
+        if (_serverJumpPressedThisFrame) _serverJumpBufferCounter = _jumpBufferTime;
+        else if (_serverJumpBufferCounter > 0f) _serverJumpBufferCounter -= Time.fixedDeltaTime;
+
+        if (_serverJumpBufferCounter <= 0f || !_serverIsGrounded || _serverJumpConsumedSinceGrounded)
+        {
+            _serverJumpPressedThisFrame = false;
+            return;
+        }
+
+        if (!CheckGround(out Vector3 groundPoint))
+        {
+            _serverJumpPressedThisFrame = false;
+            return;
+        }
+
+        SnapToGround(groundPoint);
+
+        Vector3 vel = _rb.linearVelocity;
+        vel.y = 0f;
+        _rb.linearVelocity = vel;
+
+        float jumpVelocity = Mathf.Sqrt(-2f * Physics.gravity.y * Mathf.Max(0.01f, _jumpHeight));
+        _rb.AddForce(Vector3.up * jumpVelocity, ForceMode.VelocityChange);
+
+        _serverJumpBufferCounter = 0f;
+        _serverJumpPressedThisFrame = false;
+        _serverJumpConsumedSinceGrounded = true;
+        _serverIsGrounded = false;
+    }
+
+    private void SnapToGround(Vector3 groundPoint)
+    {
+        float halfHeight = 1f;
+        if (_capsule != null) halfHeight = _capsule.height * 0.5f * Mathf.Abs(_t.localScale.y);
+
+        Vector3 pos = _rb.position;
+        pos.y = groundPoint.y + halfHeight + _groundSnapOffset;
+        _rb.position = pos;
+    }
+
     private void SubmitInputToServer(MoveState moveState)
     {
         Vector2 clampedMove = Vector2.ClampMagnitude(_moveInput, 1f);
@@ -228,14 +350,14 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         if (IsServer)
         {
-            ApplyInputAuthoritative(clampedMove, clampedLook, (int)moveState, _localYRot);
+            ApplyInputAuthoritative(clampedMove, clampedLook, (int)moveState, _localYRot, _jumpHeld, _jumpPressedThisFrame);
             return;
         }
 
-        SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _localYRot);
+        SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _localYRot, _jumpHeld, _jumpPressedThisFrame);
     }
 
-    private void ApplyInputAuthoritative(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
+    private void ApplyInputAuthoritative(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw, bool jumpHeld, bool jumpPressedThisFrame)
     {
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
 
@@ -249,11 +371,14 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _serverLookInput = lookInput;
         _serverMoveState = (MoveState)moveStateIndex;
         _serverYaw = yaw;
+
+        _serverJumpHeld = jumpHeld;
+        if (jumpPressedThisFrame) _serverJumpPressedThisFrame = true;
     }
 
     [ServerRpc]
-    private void SubmitInputServerRpc(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
+    private void SubmitInputServerRpc(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw, bool jumpHeld, bool jumpPressedThisFrame)
     {
-        ApplyInputAuthoritative(moveInput, lookInput, moveStateIndex, yaw);
+        ApplyInputAuthoritative(moveInput, lookInput, moveStateIndex, yaw, jumpHeld, jumpPressedThisFrame);
     }
 }

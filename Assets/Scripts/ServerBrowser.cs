@@ -122,6 +122,8 @@ public sealed class ServerBrowser : MonoBehaviour
                     _spawnedEntries[i].SetRefreshing();
             }
 
+            bool anyNameChanged = false;
+
             for (int i = 0; i < _servers.Count; i++)
             {
                 if (i >= _spawnedEntries.Count) break;
@@ -133,10 +135,24 @@ public sealed class ServerBrowser : MonoBehaviour
                 ServerQueryResult result = await QueryServerAsync(entry);
 
                 if (result.Success)
+                {
+                    if (result.Response != null && !string.IsNullOrWhiteSpace(result.Response.Name))
+                    {
+                        if (entry.Name != result.Response.Name)
+                        {
+                            entry.Name = result.Response.Name;
+                            anyNameChanged = true;
+                        }
+                    }
+
+                    ui.RefreshStatic();
                     ui.SetOnline(result.Response, result.PingMs);
-                else
-                    ui.SetOffline();
+                }
+                else ui.SetOffline();
             }
+
+            if (anyNameChanged)
+                SaveServers();
         }
         finally
         {

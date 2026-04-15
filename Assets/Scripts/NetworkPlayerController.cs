@@ -27,8 +27,9 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Vector2 _moveInput;
     private Vector2 _lookInput;
 
-    private float _xRot;
-    private float _yRot;
+    private float _localXRot;
+    private float _localYRot;
+    private float _serverYaw;
 
     private Camera _cam;
     private Transform _camT;
@@ -107,23 +108,25 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private void UpdateCamera()
     {
         Vector2 input = _mouseSensitivity * Time.deltaTime * _lookInput;
-        _xRot = Mathf.Clamp(_xRot - input.y, _camLimits.x, _camLimits.y);
-        _yRot += input.x;
+        _localXRot = Mathf.Clamp(_localXRot - input.y, _camLimits.x, _camLimits.y);
+        _localYRot += input.x;
     }
 
     private void LateUpdateCamera()
     {
         if (_camT == null || _cameraTarget == null) return;
 
+        Quaternion targetRot = Quaternion.Euler(_localXRot, _localYRot, 0f);
+
         _camT.SetPositionAndRotation(
             _cameraTarget.position,
-            Quaternion.Slerp(_camT.rotation, Quaternion.Euler(_xRot, _yRot, 0f), _animationCamShake)
+            Quaternion.Slerp(_camT.rotation, targetRot, _animationCamShake)
         );
     }
 
     private void FixedUpdateServerRotation()
     {
-        _t.rotation = Quaternion.Euler(0f, _yRot, 0f);
+        _t.rotation = Quaternion.Euler(0f, _serverYaw, 0f);
     }
 
     private void FixedUpdateMovement()
@@ -150,11 +153,11 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         if (IsServer)
         {
-            ApplyInputAuthoritative(clampedMove, clampedLook, (int)moveState, _yRot);
+            ApplyInputAuthoritative(clampedMove, clampedLook, (int)moveState, _localYRot);
             return;
         }
 
-        SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _yRot);
+        SubmitInputServerRpc(clampedMove, clampedLook, (int)moveState, _localYRot);
     }
     private void ApplyInputAuthoritative(Vector2 moveInput, Vector2 lookInput, int moveStateIndex, float yaw)
     {
@@ -162,7 +165,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _serverMoveInput = moveInput;
         _serverLookInput = lookInput;
         _serverMoveState = (MoveState)moveStateIndex;
-        _yRot = yaw;
+        _serverYaw = yaw;
     }
 
     [ServerRpc]

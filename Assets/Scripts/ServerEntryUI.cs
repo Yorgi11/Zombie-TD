@@ -24,64 +24,60 @@ public sealed class ServerEntryUI : MonoBehaviour
     [SerializeField] private Color _offlineColor = Color.red;
     [SerializeField] private Color _unknownColor = Color.yellow;
 
-    private string _sessionId;
-    private string _sessionCode;
+    private RecentJoinCodeEntry _savedEntry;
     private SessionBrowser _browser;
 
-    public void Bind(SessionBrowser browser, string sessionId, string sessionName, string sessionCode, int currentPlayers, int maxPlayers, bool joinable)
+    public void BindSavedCode(SessionBrowser browser, RecentJoinCodeEntry entry)
     {
         _browser = browser;
-        _sessionId = sessionId;
-        _sessionCode = sessionCode;
+        _savedEntry = entry;
 
         if (_serverNameText != null)
-            _serverNameText.text = string.IsNullOrWhiteSpace(sessionName) ? "Unnamed Session" : sessionName;
+            _serverNameText.text = string.IsNullOrWhiteSpace(entry.Name) ? "Saved Session" : entry.Name;
 
         if (_serverIPText != null)
-            _serverIPText.text = string.IsNullOrWhiteSpace(sessionCode) ? "Code: ---" : $"Code: {sessionCode}";
+            _serverIPText.text = string.IsNullOrWhiteSpace(entry.Code) ? "Code: ---" : $"Code: {entry.Code}";
 
         if (_serverStatusText != null)
-            _serverStatusText.text = joinable ? "Open" : "Unavailable";
+            _serverStatusText.text = "Saved";
 
         if (_serverPingText != null)
             _serverPingText.text = "---";
 
         if (_serverPlayerCountText != null)
-            _serverPlayerCountText.text = $"{Mathf.Max(0, currentPlayers)}/{Mathf.Max(1, maxPlayers)}";
+            _serverPlayerCountText.text = "-/-";
 
         if (_serverStatusImage != null)
-            _serverStatusImage.color = joinable ? _onlineColor : _offlineColor;
+            _serverStatusImage.color = _unknownColor;
 
         if (_serverPingImage != null)
             _serverPingImage.color = _unknownColor;
 
         if (_joinButton != null)
         {
-            _joinButton.interactable = joinable;
+            _joinButton.interactable = true;
             _joinButton.onClick.RemoveAllListeners();
-            _joinButton.onClick.AddListener(OnClickJoin);
+            _joinButton.onClick.AddListener(OnClickJoinSavedCode);
         }
 
         if (_deleteButton != null)
         {
-            _deleteButton.gameObject.SetActive(false);
+            _deleteButton.gameObject.SetActive(true);
+            _deleteButton.onClick.RemoveAllListeners();
+            _deleteButton.onClick.AddListener(OnClickDeleteSavedCode);
         }
     }
 
-    public void SetRefreshing()
+    private void OnClickJoinSavedCode()
     {
-        if (_serverStatusText != null) _serverStatusText.text = "Refreshing";
-        if (_serverPingText != null) _serverPingText.text = "...";
-        if (_serverPlayerCountText != null) _serverPlayerCountText.text = "-/-";
-        if (_serverStatusImage != null) _serverStatusImage.color = _unknownColor;
-        if (_serverPingImage != null) _serverPingImage.color = _unknownColor;
-        if (_joinButton != null) _joinButton.interactable = false;
+        if (_browser != null && _savedEntry != null)
+            _browser.JoinSavedEntry(_savedEntry);
     }
 
-    private void OnClickJoin()
+    private void OnClickDeleteSavedCode()
     {
-        if (_browser != null && !string.IsNullOrWhiteSpace(_sessionId))
-            _browser.JoinSessionById(_sessionId);
+        if (_browser != null && _savedEntry != null)
+            _browser.RemoveEntry(_savedEntry);
     }
 
     private void OnDestroy()

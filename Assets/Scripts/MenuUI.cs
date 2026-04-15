@@ -30,6 +30,12 @@ public sealed class MenuUI : MonoBehaviour
         await NetBootstrap.Instance.JoinSessionByCodeAsync(joinCode);
     }
 
+    public void OnClickAddSavedCode()
+    {
+        if (_sessionBrowser != null)
+            _sessionBrowser.AddEntryFromInput();
+    }
+
     public void OnClickRefresh()
     {
         if (_sessionBrowser != null)

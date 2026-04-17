@@ -1,6 +1,5 @@
 using TMPro;
 using UnityEngine;
-
 public sealed class MenuUI : MonoBehaviour
 {
     [Header("UI")]

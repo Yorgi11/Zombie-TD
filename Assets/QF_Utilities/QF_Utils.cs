@@ -12,6 +12,13 @@ namespace QF_Tools.QF_Utilities
             yield return new WaitForSeconds(delay);
             function?.Invoke();
         }
+        public static IEnumerator DelayRunFunction(bool startState, bool endState, float delay, (Action, Action<bool>) functionState)
+        {
+            functionState.Item2?.Invoke(startState);
+            yield return new WaitForSeconds(delay);
+            functionState.Item1?.Invoke();
+            functionState.Item2?.Invoke(endState);
+        }
         public static IEnumerator DelayBoolChange(bool startState, bool endState, float delay, Action<bool> onUpdate)
         {
             onUpdate?.Invoke(startState);

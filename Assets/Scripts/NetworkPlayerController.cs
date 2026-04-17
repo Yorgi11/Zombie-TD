@@ -26,7 +26,6 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     [SerializeField] private float _maxLookDeltaPerFrame = 50f;
     [Space]
     [Space]
-    [SerializeField] private Gun _gunPrefab;
     [SerializeField] private Transform _aimTarget;
 
     private InputSystem_Actions _input;
@@ -99,7 +98,9 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             _input.Enable();
             ToggleMouse();
             SetupLocalCamera();
-            _currentGun = Instantiate(_gunPrefab, _camT);
+            Gun gun = GameManager.Instance._guns[0];
+            _currentGun = Instantiate(gun, gun.HipPosition, Quaternion.identity, _camT);
+            _aimTarget.SetParent(_camT);
         }
     }
     private void CleanupLocalOwnerState()

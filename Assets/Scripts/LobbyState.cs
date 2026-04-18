@@ -1,16 +1,63 @@
+using TMPro;
 using UnityEngine;
 
-public class LobbyState : MonoBehaviour
+public sealed class LobbyState : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    [Header("Selection")]
+    [SerializeField] private string _selectedMapScene = "Game";
+    [SerializeField] private string _selectedGameMode = "Default";
+
+    [Header("Optional UI")]
+    [SerializeField] private TMP_Text _selectedMapText;
+    [SerializeField] private TMP_Text _selectedModeText;
+    [SerializeField] private TMP_Text _statusText;
+
+    private void OnEnable()
     {
-        
+        if (NetBootstrap.Instance != null)
+            NetBootstrap.Instance.OnAllClientsLoadedGameScene += OnAllClientsLoadedGameScene;
+
+        RefreshLabels();
     }
 
-    // Update is called once per frame
-    void Update()
+    private void OnDisable()
     {
-        
+        if (NetBootstrap.Instance != null)
+            NetBootstrap.Instance.OnAllClientsLoadedGameScene -= OnAllClientsLoadedGameScene;
+    }
+
+    public void SetMapScene(string sceneName)
+    {
+        if (string.IsNullOrWhiteSpace(sceneName)) return;
+        _selectedMapScene = sceneName.Trim();
+        RefreshLabels();
+    }
+
+    public void SetGameMode(string modeName)
+    {
+        if (string.IsNullOrWhiteSpace(modeName)) return;
+        _selectedGameMode = modeName.Trim();
+        RefreshLabels();
+    }
+
+    public void OnClickStartGame()
+    {
+        if (NetBootstrap.Instance == null || !NetBootstrap.Instance.IsServer) return;
+        NetBootstrap.Instance.StartGameFromLobby(_selectedMapScene);
+    }
+
+    private void OnAllClientsLoadedGameScene(string sceneName)
+    {
+        if (_statusText != null)
+            _statusText.text = $"Loaded: {sceneName}";
+    }
+
+    private void RefreshLabels()
+    {
+        if (_selectedMapText != null)
+            _selectedMapText.text = _selectedMapScene;
+
+        if (_selectedModeText != null)
+            _selectedModeText.text = _selectedGameMode;
     }
 }

@@ -19,22 +19,42 @@ public sealed class NetBootstrap : MonoBehaviour
     [SerializeField] private int _maxPlayers = 4;
     [SerializeField] private string _defaultSessionName = "Session";
 
-    [Header("Player Spawning")]
+    [Header("Scenes")]
+    [SerializeField] private string _lobbySceneName = "Lobby";
+    [SerializeField] private string _defaultGameSceneName = "Game";
+
+    [Header("Player Prefab")]
     [SerializeField] private NetworkObject _playerPrefab;
-    [SerializeField] private Vector3 _spawnOrigin = Vector3.zero;
-    [SerializeField] private float _spawnSpacing = 3f;
+
+    [Header("Temporary Roam Spawns")]
+    [SerializeField] private Vector3 _roamSpawnOrigin = Vector3.zero;
+    [SerializeField] private float _roamSpawnSpacing = 3f;
+
+    [Header("Final Start Spawns")]
+    [SerializeField] private Vector3 _finalSpawnOrigin = new Vector3(0f, 1f, 0f);
+    [SerializeField] private float _finalSpawnSpacing = 3f;
 
     private NetworkManager _networkManager;
     private UnityTransport _transport;
 
-    private bool _gameSceneLoaded;
     private bool _servicesReady;
     private bool _initInProgress;
 
     private ISession _currentSession;
     private string _currentSessionCode;
 
+    private string _activeTargetGameScene = "";
+    private bool _loadingLobby;
+    private bool _loadingGame;
+
+    private readonly Dictionary<ulong, Vector3> _reservedRoamSpawns = new();
+    private readonly Dictionary<ulong, Vector3> _reservedFinalSpawns = new();
+
     public string CurrentSessionCode => _currentSessionCode;
+    public bool IsServer => _networkManager != null && _networkManager.IsServer;
+    public bool IsInLobbyScene => SceneManager.GetActiveScene().name == _lobbySceneName;
+
+    public event Action<string> OnAllClientsLoadedGameScene;
 
     private async void Awake()
     {
@@ -74,7 +94,10 @@ public sealed class NetBootstrap : MonoBehaviour
             _networkManager.ConnectionApprovalCallback = null;
 
             if (_networkManager.SceneManager != null)
+            {
                 _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
+                _networkManager.SceneManager.OnLoadComplete -= OnLoadComplete;
+            }
         }
 
         if (Instance == this) Instance = null;
@@ -92,9 +115,7 @@ public sealed class NetBootstrap : MonoBehaviour
         if (_servicesReady) return true;
 
         while (_initInProgress)
-        {
             await Task.Yield();
-        }
 
         if (_servicesReady) return true;
 
@@ -196,19 +217,46 @@ public sealed class NetBootstrap : MonoBehaviour
 
     public void ShutdownIfRunning()
     {
-        _gameSceneLoaded = false;
         _currentSessionCode = string.Empty;
+        _activeTargetGameScene = "";
+        _loadingLobby = false;
+        _loadingGame = false;
+
+        _reservedRoamSpawns.Clear();
+        _reservedFinalSpawns.Clear();
 
         if (_networkManager != null && _networkManager.IsListening)
             _networkManager.Shutdown();
     }
 
-    public void LoadGameScene()
+    public void LoadLobbyScene()
     {
-        if (_networkManager == null || !_networkManager.IsServer || _gameSceneLoaded) return;
+        if (_networkManager == null || !_networkManager.IsServer) return;
+        if (_loadingLobby) return;
+        if (SceneManager.GetActiveScene().name == _lobbySceneName) return;
 
-        _gameSceneLoaded = true;
-        _networkManager.SceneManager.LoadScene("Game", LoadSceneMode.Single);
+        _loadingLobby = true;
+        _networkManager.SceneManager.LoadScene(_lobbySceneName, LoadSceneMode.Single);
+    }
+
+    public void StartGameFromLobby(string sceneName)
+    {
+        if (_networkManager == null || !_networkManager.IsServer) return;
+        if (!IsInLobbyScene) return;
+        if (_loadingGame) return;
+
+        string targetScene = string.IsNullOrWhiteSpace(sceneName) ? _defaultGameSceneName : sceneName.Trim();
+
+        _activeTargetGameScene = targetScene;
+        _loadingGame = true;
+
+        ReserveGameSpawns();
+        _networkManager.SceneManager.LoadScene(targetScene, LoadSceneMode.Single);
+    }
+
+    public void StartGameFromLobby()
+    {
+        StartGameFromLobby(_defaultGameSceneName);
     }
 
     private void OnServerStarted()
@@ -217,6 +265,9 @@ public sealed class NetBootstrap : MonoBehaviour
         {
             _networkManager.SceneManager.OnLoadEventCompleted -= OnLoadEventCompleted;
             _networkManager.SceneManager.OnLoadEventCompleted += OnLoadEventCompleted;
+
+            _networkManager.SceneManager.OnLoadComplete -= OnLoadComplete;
+            _networkManager.SceneManager.OnLoadComplete += OnLoadComplete;
         }
     }
 
@@ -224,30 +275,107 @@ public sealed class NetBootstrap : MonoBehaviour
     {
         if (!_networkManager.IsServer) return;
 
-        if (!_gameSceneLoaded)
-        {
-            LoadGameScene();
-            return;
-        }
+        string activeScene = SceneManager.GetActiveScene().name;
 
-        if (SceneManager.GetActiveScene().name == "Game")
-            SpawnPlayerForClient(clientId);
+        if (activeScene == _lobbySceneName || (_loadingGame && activeScene == _activeTargetGameScene))
+            return;
+
+        LoadLobbyScene();
     }
 
     private void OnClientDisconnected(ulong clientId)
     {
         Debug.Log($"[NetBootstrap] Client disconnected: {clientId}");
+        _reservedRoamSpawns.Remove(clientId);
+        _reservedFinalSpawns.Remove(clientId);
+    }
+
+    private void OnLoadComplete(ulong clientId, string sceneName, LoadSceneMode loadSceneMode)
+    {
+        if (!_networkManager.IsServer) return;
+        if (!_loadingGame) return;
+        if (!string.Equals(sceneName, _activeTargetGameScene, StringComparison.Ordinal)) return;
+
+        SpawnOrMovePlayerForClient(clientId, GetReservedRoamSpawn(clientId));
     }
 
     private void OnLoadEventCompleted(string sceneName, LoadSceneMode loadSceneMode, List<ulong> clientsCompleted, List<ulong> clientsTimedOut)
     {
         if (!_networkManager.IsServer) return;
-        if (sceneName != "Game") return;
 
-        SpawnPlayersForConnectedClients();
+        if (string.Equals(sceneName, _lobbySceneName, StringComparison.Ordinal))
+        {
+            _loadingLobby = false;
+            return;
+        }
+
+        if (_loadingGame && string.Equals(sceneName, _activeTargetGameScene, StringComparison.Ordinal))
+        {
+            ResetPlayersToFinalGameSpawns();
+            _loadingGame = false;
+
+            OnAllClientsLoadedGameScene?.Invoke(sceneName);
+        }
     }
 
-    private void SpawnPlayersForConnectedClients()
+    private void ReserveGameSpawns()
+    {
+        _reservedRoamSpawns.Clear();
+        _reservedFinalSpawns.Clear();
+
+        foreach (ulong clientId in _networkManager.ConnectedClientsIds)
+        {
+            _reservedRoamSpawns[clientId] = GetRoamSpawn(clientId);
+            _reservedFinalSpawns[clientId] = GetFinalSpawn(clientId);
+        }
+    }
+
+    private Vector3 GetReservedRoamSpawn(ulong clientId)
+    {
+        if (_reservedRoamSpawns.TryGetValue(clientId, out Vector3 pos))
+            return pos;
+
+        pos = GetRoamSpawn(clientId);
+        _reservedRoamSpawns[clientId] = pos;
+        return pos;
+    }
+
+    private Vector3 GetReservedFinalSpawn(ulong clientId)
+    {
+        if (_reservedFinalSpawns.TryGetValue(clientId, out Vector3 pos))
+            return pos;
+
+        pos = GetFinalSpawn(clientId);
+        _reservedFinalSpawns[clientId] = pos;
+        return pos;
+    }
+
+    private Vector3 GetRoamSpawn(ulong clientId)
+    {
+        int index = GetClientIndex(clientId);
+        return _roamSpawnOrigin + new Vector3(index * _roamSpawnSpacing, 1f, 0f);
+    }
+
+    private Vector3 GetFinalSpawn(ulong clientId)
+    {
+        int index = GetClientIndex(clientId);
+        return _finalSpawnOrigin + new Vector3(index * _finalSpawnSpacing, 0f, 0f);
+    }
+
+    private int GetClientIndex(ulong clientId)
+    {
+        int index = 0;
+        foreach (ulong id in _networkManager.ConnectedClientsIds)
+        {
+            if (id == clientId)
+                return index;
+            index++;
+        }
+
+        return 0;
+    }
+
+    private void SpawnOrMovePlayerForClient(ulong clientId, Vector3 spawnPos)
     {
         if (_playerPrefab == null)
         {
@@ -255,17 +383,40 @@ public sealed class NetBootstrap : MonoBehaviour
             return;
         }
 
-        foreach (ulong clientId in _networkManager.ConnectedClientsIds)
-            SpawnPlayerForClient(clientId);
-    }
+        NetworkObject existing = _networkManager.SpawnManager.GetPlayerNetworkObject(clientId);
+        if (existing != null)
+        {
+            MovePlayer(existing, spawnPos);
+            return;
+        }
 
-    private void SpawnPlayerForClient(ulong clientId)
-    {
-        if (_playerPrefab == null) return;
-        if (_networkManager.SpawnManager.GetPlayerNetworkObject(clientId) != null) return;
-
-        Vector3 spawnPos = _spawnOrigin + new Vector3((_networkManager.ConnectedClientsIds.Count - 1) * _spawnSpacing, 1f, 0f);
         NetworkObject player = Instantiate(_playerPrefab, spawnPos, Quaternion.identity);
         player.SpawnAsPlayerObject(clientId, true);
+    }
+
+    private void ResetPlayersToFinalGameSpawns()
+    {
+        foreach (ulong clientId in _networkManager.ConnectedClientsIds)
+        {
+            NetworkObject player = _networkManager.SpawnManager.GetPlayerNetworkObject(clientId);
+            if (player == null) continue;
+
+            MovePlayer(player, GetReservedFinalSpawn(clientId));
+        }
+    }
+
+    private void MovePlayer(NetworkObject player, Vector3 worldPos)
+    {
+        if (player == null) return;
+
+        player.transform.SetPositionAndRotation(worldPos, Quaternion.identity);
+
+        if (player.TryGetComponent<Rigidbody>(out var rb))
+        {
+            rb.position = worldPos;
+            rb.rotation = Quaternion.identity;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
     }
 }

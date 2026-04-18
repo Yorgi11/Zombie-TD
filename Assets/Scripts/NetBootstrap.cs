@@ -306,6 +306,8 @@ public sealed class NetBootstrap : MonoBehaviour
         if (string.Equals(sceneName, _lobbySceneName, StringComparison.Ordinal))
         {
             _loadingLobby = false;
+            LobbyState lobbyState = FindFirstObjectByType<LobbyState>();
+            if (lobbyState != null) lobbyState.OnHostLobbySceneLoaded();
             return;
         }
 

@@ -144,7 +144,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         if (_currentGun)
         {
             _currentGun.RunUpdate(_input.UI.RightClick.IsPressed(), Time.deltaTime, _aimTarget.position);
-            if (_input.Player.Attack.IsPressed()) _currentGun.Shoot();
+            if (_input.Player.Attack.IsPressed()) _currentGun.TryShoot();
+            if (_input.Player.Attack.WasReleasedThisFrame()) _currentGun.ReleaseTrigger();
         }
 
         SubmitInputToServer(moveState);

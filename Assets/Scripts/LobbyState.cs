@@ -8,6 +8,9 @@ public sealed class LobbyState : MonoBehaviour
     [SerializeField] private string _selectedGameMode = "Default";
 
     [Header("Optional UI")]
+    [SerializeField] private GameObject _hostUI;
+
+    [Header("Optional UI")]
     [SerializeField] private TMP_Text _selectedMapText;
     [SerializeField] private TMP_Text _selectedModeText;
     [SerializeField] private TMP_Text _statusText;
@@ -24,6 +27,14 @@ public sealed class LobbyState : MonoBehaviour
     {
         if (NetBootstrap.Instance != null)
             NetBootstrap.Instance.OnAllClientsLoadedGameScene -= OnAllClientsLoadedGameScene;
+    }
+
+    public void OnHostLobbySceneLoaded()
+    {
+        if (NetBootstrap.Instance == null || !NetBootstrap.Instance.IsServer) return;
+        Debug.Log("[LobbyState] Host entered lobby scene.");
+        _hostUI.SetActive(true);
+        if (_statusText != null) _statusText.text = "Host in lobby";
     }
 
     public void SetMapScene(string sceneName)

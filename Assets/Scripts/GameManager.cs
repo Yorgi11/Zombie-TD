@@ -6,6 +6,12 @@ public class GameManager : QF_Singleton<GameManager>
     [SerializeField] private LayerMask _bulletHitMask;
     public Gun[] _guns;
     private ServerBulletPool _bulletPool;
+    protected override void Awake()
+    {
+        base.Awake();
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = 240;
+    }
     private void Update()
     {
         if (_bulletPool) _bulletPool.UpdateBullets(Time.deltaTime);

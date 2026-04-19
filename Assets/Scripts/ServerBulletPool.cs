@@ -67,6 +67,7 @@ public class ServerBulletPool : QF_Singleton<ServerBulletPool>
     }
     public void UpdateBullets(float dt)
     {
+        if (_activeBullets.Count <= 0) return;
         Vector3 gravityStep = Vector3.down * (_gravity * dt);
 
         for (int i = _activeBullets.Count - 1; i >= 0; i--)

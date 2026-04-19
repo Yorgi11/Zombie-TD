@@ -295,7 +295,7 @@ MonoBehaviour:
   _groundMask:
     serializedVersion: 2
     m_Bits: 1
-  _mouseSensitivity: 80
+  _mouseSensitivity: 4
   _camLimits: {x: -80, y: 80}
   _cameraTarget: {fileID: 7847171445600904104}
   _animationCamShake: 1

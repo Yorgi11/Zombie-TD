@@ -200,7 +200,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     }
     private void UpdateCamera()
     {
-        Vector2 input = _mouseSensitivity * Time.deltaTime * _lookInput;
+        Vector2 input = _mouseSensitivity * Time.fixedDeltaTime * _lookInput;
         _localXRot = Mathf.Clamp(_localXRot - input.y, _camLimits.x, _camLimits.y);
         _localYRot += input.x;
     }

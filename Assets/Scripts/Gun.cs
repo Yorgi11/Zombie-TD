@@ -1,11 +1,14 @@
+using System;
 using UnityEngine;
 using QF_Tools.QF_Utilities;
+
 public class Gun : MonoBehaviour
 {
     [Header("Stats")]
     [SerializeField] private int _fireRate;
     [SerializeField] private int _bulletVelocity;
     [SerializeField] private int _bulletDamage;
+    [SerializeField] private int _bulletPenetration;
     [Space]
     [SerializeField] private int _ammoPerMag;
     [SerializeField] private int _totalAmmo;
@@ -47,6 +50,13 @@ public class Gun : MonoBehaviour
     public float TimeBetweenShots => 1f / (_fireRate / 60f);
     public Vector3 HipPosition => _hipPosition;
 
+    public int BulletVelocity => _bulletVelocity;
+    public int BulletDamage => _bulletDamage;
+    public int BulletPenetration => _bulletPenetration;
+    public Transform BulletSpawn => _bulletSpawn;
+
+    public event Action<Gun> OnShotRequested;
+
     private void Awake()
     {
         _t = transform;
@@ -55,6 +65,7 @@ public class Gun : MonoBehaviour
         _currentBasePosition = _hipPosition;
         _targetBasePosition = _hipPosition;
     }
+
     public void RunUpdate(bool isAiming, float dt, Vector3 aimTarget)
     {
         _targetBasePosition = isAiming ? _aimPosition : _hipPosition;
@@ -70,32 +81,37 @@ public class Gun : MonoBehaviour
         Quaternion finalLocalRot = Quaternion.Euler(_currentRecoilRotation);
         _t.SetLocalPositionAndRotation(finalLocalPos, finalLocalRot);
     }
+
     public void TryShoot()
     {
         if (_isSemiAuto && _semiAutoTriggerLocked) return;
         Shoot();
     }
+
     public void ReleaseTrigger()
     {
         _semiAutoTriggerLocked = false;
     }
+
     private void Shoot()
     {
         if (!_canShoot || _isReloading || _currentAmmoInMag <= 0) return;
+
         AddRecoil();
+
         _currentAmmoInMag--;
-        FireBullet(_bulletSpawn, _bulletVelocity, _bulletDamage);
+        OnShotRequested?.Invoke(this);
+
         if (_isSemiAuto) _semiAutoTriggerLocked = true;
         if (_currentAmmoInMag <= 0 && _currentReserveAmmo > 0) Reload();
+
         StartCoroutine(QF_Coroutines.DelayBoolChange(false, true, TimeBetweenShots, v => _canShoot = v));
     }
-    public static void FireBullet(Transform spawnPoint, int velocity, int damage)
-    {
-        // Spawn bullet here
-    }
+
     public void Reload()
     {
         if (_isReloading || _currentReserveAmmo <= 0 || _currentAmmoInMag >= _ammoPerMag) return;
+
         StartCoroutine(QF_Coroutines.DelayRunFunction(
             true,
             false,
@@ -103,6 +119,7 @@ public class Gun : MonoBehaviour
             (() => ExecuteReload(), v => _isReloading = v)
         ));
     }
+
     private void ExecuteReload()
     {
         int missingAmmo = _ammoPerMag - _currentAmmoInMag;
@@ -111,6 +128,7 @@ public class Gun : MonoBehaviour
         _currentAmmoInMag += ammoToAdd;
         _currentReserveAmmo -= ammoToAdd;
     }
+
     private void AddRecoil()
     {
         _targetRecoilPosition += Vector3.back * _recoilSlide;

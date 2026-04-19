@@ -2,6 +2,7 @@ using Unity.Netcode;
 using UnityEngine;
 using QF_Tools.QF_Utilities;
 [RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(DamageableObject))]
 public sealed class NetworkPlayerController : NetworkBehaviour
 {
     private enum MoveState { Crouch, Walking, Running }
@@ -34,7 +35,10 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Rigidbody _rb;
     private CapsuleCollider _capsule;
 
+    private float _serverNextAllowedShotTime;
     private Gun _currentGun;
+
+    private DamageableObject _damageableObject;
 
     private Vector2 _moveInput;
     private Vector2 _lookInput;
@@ -68,6 +72,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         _t = transform;
         _rb = GetComponent<Rigidbody>();
+        _damageableObject = GetComponent<DamageableObject>();
         if (!gameObject.TryGetComponentInChildren(out _capsule)) Debug.LogWarning($"[NetworkPlayerController] No capsule found on or in children of {name}.");
     }
     public override void OnNetworkSpawn()
@@ -100,6 +105,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             SetupLocalCamera();
             Gun gun = GameManager.Instance._guns[0];
             _currentGun = Instantiate(gun, gun.HipPosition, Quaternion.identity, _camT);
+            _currentGun.OnShotRequested += HandleLocalShotRequested;
             _aimTarget.SetParent(_camT);
         }
     }
@@ -112,6 +118,12 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
+        }
+        if (_currentGun != null)
+        {
+            _currentGun.OnShotRequested -= HandleLocalShotRequested;
+            Destroy(_currentGun.gameObject);
+            _currentGun = null;
         }
         _cam = null;
         _camT = null;
@@ -336,5 +348,37 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(sphereCenter, _groundCheckRadius);
+    }
+    private void HandleLocalShotRequested(Gun gun)
+    {
+        if (gun == null || gun.BulletSpawn == null) return;
+        Vector3 origin = gun.BulletSpawn.position;
+        Vector3 direction = gun.BulletSpawn.forward;
+        if (IsServer)
+        {
+            ServerHandleFireRequest(origin, direction, gun.BulletVelocity, gun.BulletDamage, gun.BulletPenetration, gun.TimeBetweenShots);
+            return;
+        }
+        RequestFireServerRpc(origin, direction, gun.BulletVelocity, gun.BulletDamage, gun.BulletPenetration, gun.TimeBetweenShots);
+    }
+
+    [ServerRpc]
+    private void RequestFireServerRpc(Vector3 origin, Vector3 direction, int bulletVelocity, int bulletDamage, int bulletPenetration, float timeBetweenShots)
+     => ServerHandleFireRequest(origin, direction, bulletVelocity, bulletDamage, bulletPenetration, timeBetweenShots);
+    private void ServerHandleFireRequest(Vector3 origin, Vector3 direction, int bulletVelocity, int bulletDamage, int bulletPenetration, float timeBetweenShots)
+    {
+        if (!IsServer) return;
+        if (ServerBulletPool.Instance == null) return;
+        float now = Time.time;
+        if (now < _serverNextAllowedShotTime) return;
+        if (direction.sqrMagnitude <= 0.0001f) return;
+        direction.Normalize();
+        _serverNextAllowedShotTime = now + Mathf.Max(0.01f, timeBetweenShots);
+        ServerBulletPool.Instance.SpawnBullet(
+            origin,
+            direction * bulletVelocity,
+            bulletDamage,
+            bulletPenetration
+        );
     }
 }

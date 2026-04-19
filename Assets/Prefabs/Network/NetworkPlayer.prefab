@@ -128,6 +128,7 @@ GameObject:
   - component: {fileID: 2857115100470630678}
   - component: {fileID: 2538536194087112997}
   - component: {fileID: 1271621156648707071}
+  - component: {fileID: 8630491588009098916}
   m_Layer: 6
   m_Name: NetworkPlayer
   m_TagString: Untagged
@@ -300,6 +301,19 @@ MonoBehaviour:
   _animationCamShake: 1
   _maxLookDeltaPerFrame: 90
   _aimTarget: {fileID: 5325468573432943723}
+--- !u!114 &8630491588009098916
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1808747900816155489}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97977281051e758498833ac280ce622b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DamageableObject
+  _maxHp: 100
 --- !u!1 &3571200737664782194
 GameObject:
   m_ObjectHideFlags: 0

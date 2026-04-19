@@ -229,7 +229,7 @@ namespace QF_Tools.QF_Utilities
             return (value - min) / (max - min);
 
         }
-            public static Quaternion[] Vector3ArrayToQuaternionArray(Vector3[] vectors)
+        public static Quaternion[] Vector3ArrayToQuaternionArray(Vector3[] vectors)
         {
             if (vectors == null) return null;
             Quaternion[] quaternions = new Quaternion[vectors.Length];

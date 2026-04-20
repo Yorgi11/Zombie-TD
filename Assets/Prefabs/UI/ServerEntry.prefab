@@ -1116,7 +1116,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: -1252580376, guid: cff904e6dd1f16c40857ad2b1d03fd70, type: 3}
+  m_Sprite: {fileID: 1810089690, guid: acf88ee7ab62b9045937747f39b17448, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1125,7 +1125,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 0.7
+  m_PixelsPerUnitMultiplier: 3
 --- !u!114 &1526372249302388755
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1141,7 +1141,9 @@ MonoBehaviour:
   _serverNameText: {fileID: 641986880713146435}
   _serverIPText: {fileID: 829531093791795736}
   _serverStatusText: {fileID: 2139061668258036384}
+  _serverPingText: {fileID: 0}
   _serverPlayerCountText: {fileID: 3475101186358910305}
+  _serverPingImage: {fileID: 0}
   _serverStatusImage: {fileID: 2934170538116562931}
   _deleteButton: {fileID: 1732192281052997851}
   _joinButton: {fileID: 8488326614085986522}

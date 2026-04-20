@@ -1,6 +1,7 @@
 using System;
 using Unity.Netcode;
 using UnityEngine;
+
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(DamageableObject))]
 public sealed class NetworkPlayerController : NetworkBehaviour
@@ -43,6 +44,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Vector2 _lookInput;
 
     private bool _menuInteract;
+    private bool _isDeadLocal;
+    private bool _deathMenuVisible;
 
     private bool _jumpInput;
     private bool _attackHeld;
@@ -74,72 +77,102 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     public event Action<int, int> OnAmmoChanged;
     public event Action<float> OnHPChanged;
+
     public Vector3 SpawnPos { get; private set; }
     public Gun CurrentGun => _currentGun;
     public DamageableObject DamageableObject => _damageableObject;
+
     private void Awake()
     {
         _t = transform;
         _rb = GetComponent<Rigidbody>();
         _damageableObject = GetComponent<DamageableObject>();
     }
-    public override void OnNetworkSpawn() =>InitializeNetworkState();
+
+    public override void OnNetworkSpawn() => InitializeNetworkState();
     public override void OnGainedOwnership() => InitializeNetworkState();
+
     public override void OnNetworkDespawn()
     {
         CleanupLocalOwnerState();
         _networkInitialized = false;
     }
+
     public override void OnLostOwnership() => CleanupLocalOwnerState();
+
     private void InitializeNetworkState()
     {
         if (!IsSpawned) return;
+
         if (!_networkInitialized)
         {
             _networkInitialized = true;
+
             if (GameManager.Instance != null && GameManager.Instance._guns != null && GameManager.Instance._guns.Length > 0)
                 _equippedGunDefinition = GameManager.Instance._guns[0];
         }
+
+        if (_damageableObject != null)
+        {
+            _damageableObject.OnHPChanged -= HandleHPChanged;
+            _damageableObject.OnHPChanged += HandleHPChanged;
+
+            _damageableObject.Die -= HandleDeath;
+            _damageableObject.Die += HandleDeath;
+
+            OnHPChanged?.Invoke(_damageableObject.CurrentHP);
+        }
+
+        SpawnPos = _t.position;
+
         if (IsOwner && !_localOwnerInitialized)
         {
             _localOwnerInitialized = true;
+
             _input ??= new();
             _input.Enable();
-            ToggleMouse();
+
+            SetMenuInteract(false);
             SetupLocalCamera();
+
             if (_equippedGunDefinition != null && _camT != null)
             {
                 _currentGun = Instantiate(_equippedGunDefinition, _equippedGunDefinition.HipPosition, Quaternion.identity, _camT);
                 _currentGun.OnShotRequested += HandleLocalShotRequested;
                 _currentGun.OnAmmoChanged += HandleGunAmmoChanged;
+                OnAmmoChanged?.Invoke(_currentGun.CurrentAmmoInMag, _currentGun.CurrentReserveAmmo);
             }
-            OnAmmoChanged?.Invoke(_currentGun.CurrentAmmoInMag, _currentGun.CurrentReserveAmmo);
-            if (_aimTarget != null && _camT != null) _aimTarget.SetParent(_camT, true);
+
+            if (_aimTarget != null && _camT != null)
+                _aimTarget.SetParent(_camT, true);
+
             _nextInputSendTime = 0f;
             _lastSentMoveInput = new Vector2(999f, 999f);
             _lastSentYaw = float.MaxValue;
             _lastSentJumpInput = false;
             _lastSentMoveState = MoveState.Walking;
+
+            _isDeadLocal = _damageableObject != null && _damageableObject.IsDead;
+            SetDeathMenuVisible(_isDeadLocal);
+            SetMenuInteract(_isDeadLocal);
         }
+    }
+
+    private void CleanupLocalOwnerState()
+    {
         if (_damageableObject != null)
         {
             _damageableObject.OnHPChanged -= HandleHPChanged;
-            _damageableObject.OnHPChanged += HandleHPChanged;
-            OnHPChanged?.Invoke(_damageableObject.CurrentHP);
+            _damageableObject.Die -= HandleDeath;
         }
-        SpawnPos = _t.position;
-        _damageableObject.Die += HandleDeath;
-    }
-    private void CleanupLocalOwnerState()
-    {
+
         if (!_localOwnerInitialized) return;
+
         _localOwnerInitialized = false;
         _input?.Disable();
-        if (IsOwner)
-        {
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
+
+        SetMenuInteract(true);
+
         if (_currentGun != null)
         {
             _currentGun.OnShotRequested -= HandleLocalShotRequested;
@@ -147,46 +180,140 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             Destroy(_currentGun.gameObject);
             _currentGun = null;
         }
-        if (_damageableObject != null) _damageableObject.OnHPChanged -= HandleHPChanged;
+
         _cam = null;
         _camT = null;
     }
+
     private void HandleGunAmmoChanged(int ammoInMag, int reserveAmmo) => OnAmmoChanged?.Invoke(ammoInMag, reserveAmmo);
     private void HandleHPChanged(float hp) => OnHPChanged?.Invoke(hp);
-    private void ToggleMouse()
+
+    private void SetMenuInteract(bool enabled)
     {
-        switch (Cursor.lockState)
-        {
-            case CursorLockMode.None:
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-                _menuInteract = false;
-                break;
-            case CursorLockMode.Locked:
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                _menuInteract = true;
-                break;
-        }
+        _menuInteract = enabled;
+        Cursor.lockState = enabled ? CursorLockMode.None : CursorLockMode.Locked;
+        Cursor.visible = enabled;
     }
+
+    private void SetDeathMenuVisible(bool visible)
+    {
+        if (GameUI.Instance == null) return;
+        if (_deathMenuVisible == visible) return;
+
+        GameUI.Instance.ToggleDeathScreen();
+        _deathMenuVisible = visible;
+    }
+
     private void HandleDeath()
     {
         if (!IsOwner) return;
-        GameUI.Instance.ToggleDeathScreen();
-        ToggleMouse();
+        if (_isDeadLocal) return;
+
+        _isDeadLocal = true;
+        CancelLocalCombatInput();
+        SetDeathMenuVisible(true);
+        SetMenuInteract(true);
     }
+
     public void HandleRespawn()
     {
         if (!IsOwner) return;
-        _t.position = SpawnPos;
-        _damageableObject.RestoreFullHP();
+        RequestRespawnServerRpc();
     }
+
+    [ServerRpc]
+    private void RequestRespawnServerRpc()
+    {
+        if (!IsServer) return;
+        if (_damageableObject == null) return;
+
+        _t.SetPositionAndRotation(SpawnPos, Quaternion.identity);
+
+        _rb.position = SpawnPos;
+        _rb.rotation = Quaternion.identity;
+        _rb.linearVelocity = Vector3.zero;
+        _rb.angularVelocity = Vector3.zero;
+
+        _serverMoveInput = Vector2.zero;
+        _jumpInput = false;
+        _attackHeld = false;
+
+        _damageableObject.RestoreFullHP();
+        ServerSyncHealthState();
+    }
+
+    public void ServerSyncHealthState()
+    {
+        if (!IsServer || _damageableObject == null) return;
+
+        bool isDead = _damageableObject.IsDead;
+        if (isDead)
+        {
+            _serverMoveInput = Vector2.zero;
+            _rb.linearVelocity = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
+        }
+
+        ClientRpcParams target = new()
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { OwnerClientId }
+            }
+        };
+
+        SyncHealthStateClientRpc(_damageableObject.CurrentHP, isDead, SpawnPos, target);
+    }
+
+    [ClientRpc]
+    private void SyncHealthStateClientRpc(float hp, bool isDead, Vector3 spawnPos, ClientRpcParams clientRpcParams = default)
+    {
+        if (!IsOwner) return;
+
+        SpawnPos = spawnPos;
+        OnHPChanged?.Invoke(hp);
+
+        if (isDead)
+        {
+            if (_isDeadLocal) return;
+
+            _isDeadLocal = true;
+            CancelLocalCombatInput();
+            SetDeathMenuVisible(true);
+            SetMenuInteract(true);
+        }
+        else
+        {
+            bool wasDead = _isDeadLocal;
+            _isDeadLocal = false;
+
+            if (wasDead)
+            {
+                SetDeathMenuVisible(false);
+                SetMenuInteract(false);
+                CancelLocalCombatInput();
+            }
+        }
+    }
+
+    private void CancelLocalCombatInput()
+    {
+        _moveInput = Vector2.zero;
+        _lookInput = Vector2.zero;
+        _jumpInput = false;
+        _attackHeld = false;
+        _isAiming = false;
+
+        if (_currentGun != null) _currentGun.ReleaseTrigger();
+    }
+
     private void Update()
     {
-        if (!IsSpawned || !IsOwner || !_localOwnerInitialized || _menuInteract) return;
-        ReadLocalInput();
+        if (!IsSpawned || !IsOwner || !_localOwnerInitialized || _menuInteract || _isDeadLocal) return;
 
+        ReadLocalInput();
         UpdateCamera();
+
         if (_currentGun != null)
         {
             _currentGun.RunUpdate(_isAiming, Time.deltaTime);
@@ -199,16 +326,27 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void FixedUpdate()
     {
-        if (!IsSpawned || !IsServer || _menuInteract) return;
+        if (!IsSpawned || !IsServer) return;
+
+        if (_damageableObject != null && _damageableObject.IsDead)
+        {
+            _serverMoveInput = Vector2.zero;
+            _rb.linearVelocity = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
+            return;
+        }
+
         HandleJump();
         _t.rotation = Quaternion.Euler(0f, _serverYaw, 0f);
         FixedUpdateMovement();
     }
+
     private void LateUpdate()
     {
-        if (!IsSpawned || !IsOwner || !_localOwnerInitialized || _menuInteract) return;
+        if (!IsSpawned || !IsOwner || !_localOwnerInitialized || _menuInteract || _isDeadLocal) return;
         LateUpdateCamera();
     }
+
     private void ReadLocalInput()
     {
         _moveInput = _input.Player.Move.ReadValue<Vector2>();
@@ -217,12 +355,14 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _attackHeld = _input.Player.Attack.IsPressed();
         _isAiming = _input.UI.RightClick.IsPressed();
     }
+
     private MoveState GetCurrentMoveState()
     {
         if (_input.Player.Crouch.IsPressed()) return MoveState.Crouch;
         if (_input.Player.Sprint.IsPressed()) return MoveState.Running;
         return MoveState.Walking;
     }
+
     private void SetupLocalCamera()
     {
         _cam = Camera.main;
@@ -231,19 +371,19 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             Debug.LogWarning($"[NetworkPlayerController] No main camera found on {name}. IsOwner={IsOwner}");
             return;
         }
+
         if (_cameraTarget == null)
         {
             Debug.LogWarning($"[NetworkPlayerController] _cameraTarget is null on {name}");
             return;
         }
+
         _camT = _cam.transform;
         _localYRot = _t.eulerAngles.y;
         _serverYaw = _t.eulerAngles.y;
-        _camT.SetPositionAndRotation(
-            _cameraTarget.position,
-            Quaternion.Euler(_localXRot, _localYRot, 0f)
-        );
+        _camT.SetPositionAndRotation(_cameraTarget.position, Quaternion.Euler(_localXRot, _localYRot, 0f));
     }
+
     private void UpdateCamera()
     {
         float clampedLookX = Mathf.Clamp(_lookInput.x, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
@@ -252,56 +392,76 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _localXRot = Mathf.Clamp(_localXRot - input.y, _camLimits.x, _camLimits.y);
         _localYRot += input.x;
     }
+
     private void LateUpdateCamera()
     {
         if (_camT == null || _cameraTarget == null) return;
+
         Quaternion targetRot = Quaternion.Euler(_localXRot, _localYRot, 0f);
         _camT.SetPositionAndRotation(
             _cameraTarget.position,
             Quaternion.Slerp(_camT.rotation, targetRot, _animationCamShake)
         );
     }
+
     private void SendInputToServerIfNeeded()
     {
         float interval = _inputSendRate > 0f ? (1f / _inputSendRate) : 0.0333f;
         if (Time.unscaledTime < _nextInputSendTime) return;
         _nextInputSendTime = Time.unscaledTime + interval;
+
         Vector2 clampedMove = Vector2.ClampMagnitude(_moveInput, 1f);
         MoveState moveState = GetCurrentMoveState();
         float yaw = _localYRot;
+
         bool changed =
             clampedMove != _lastSentMoveInput ||
             _jumpInput != _lastSentJumpInput ||
             moveState != _lastSentMoveState ||
             Mathf.Abs(Mathf.DeltaAngle(_lastSentYaw, yaw)) > 0.05f;
+
         if (!changed) return;
+
         _lastSentMoveInput = clampedMove;
         _lastSentJumpInput = _jumpInput;
         _lastSentMoveState = moveState;
         _lastSentYaw = yaw;
+
         if (IsServer)
         {
             ApplyInputAuthoritative(clampedMove, (int)moveState, yaw, _jumpInput);
             return;
         }
+
         SubmitInputServerRpc(clampedMove, (int)moveState, yaw, _jumpInput);
     }
+
     private void ApplyInputAuthoritative(Vector2 moveInput, int moveStateIndex, float yaw, bool jumpInput)
     {
+        if (_damageableObject != null && _damageableObject.IsDead)
+        {
+            _serverMoveInput = Vector2.zero;
+            return;
+        }
+
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
         if (moveStateIndex < 0 || moveStateIndex >= _moveSpeeds.Length) moveStateIndex = (int)MoveState.Walking;
+
         _serverMoveInput = moveInput;
         _serverMoveState = (MoveState)moveStateIndex;
         _serverYaw = yaw;
         _jumpInput = jumpInput;
     }
+
     [ServerRpc]
     private void SubmitInputServerRpc(Vector2 moveInput, int moveStateIndex, float yaw, bool jumpInput)
-    => ApplyInputAuthoritative(moveInput, moveStateIndex, yaw, jumpInput);
+        => ApplyInputAuthoritative(moveInput, moveStateIndex, yaw, jumpInput);
+
     private void FixedUpdateMovement()
     {
         Vector3 moveDir = (_t.forward * _serverMoveInput.y + _t.right * _serverMoveInput.x);
         if (moveDir.sqrMagnitude > 1e-6f) moveDir.Normalize();
+
         float speed = _moveSpeeds[(int)_serverMoveState];
         Vector3 targetVel = moveDir * speed;
         Vector3 vel = _rb.linearVelocity;
@@ -309,10 +469,12 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         Vector3 accel = (targetVel - velXZ) * _moveAcceleration;
         _rb.AddForce(accel, ForceMode.Acceleration);
     }
+
     private bool CheckGround(out Vector3 groundPoint)
     {
         groundPoint = _t.position;
         Vector3 sphereCenter = _t.position + Vector3.up * _groundCheckOffset + (_groundCheckRadius * Vector3.up);
+
         int hitCount = Physics.OverlapSphereNonAlloc(
             sphereCenter,
             _groundCheckRadius,
@@ -330,6 +492,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             if (hit == null) continue;
             if (hit.transform.IsChildOf(_t)) continue;
             if (hit.attachedRigidbody == _rb) continue;
+
             Vector3 closest = hit.ClosestPoint(_t.position);
             float distSqr = (_t.position - closest).sqrMagnitude;
             if (distSqr < bestDistSqr)
@@ -341,47 +504,62 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         }
         return found;
     }
+
     private void HandleJump()
     {
         if (!_jumpInput || Time.time < _jumpLockUntil) return;
         if (!CheckGround(out Vector3 groundPoint)) return;
+
         _rb.position = groundPoint;
 
         Vector3 vel = _rb.linearVelocity;
         vel.y = 0f;
         _rb.linearVelocity = vel;
+
         float jumpVelocity = Mathf.Sqrt(-2f * Physics.gravity.y * Mathf.Max(0.01f, _jumpHeight));
         _rb.AddForce(Vector3.up * jumpVelocity, ForceMode.VelocityChange);
         _jumpLockUntil = Time.time + _jumpBufferTime;
     }
+
     private void HandleLocalShotRequested(Gun gun)
     {
+        if (_isDeadLocal) return;
         if (gun == null || gun.BulletSpawn == null) return;
+
         Vector3 origin = gun.BulletSpawn.position;
         Vector3 direction = gun.BulletSpawn.forward;
         if (direction.sqrMagnitude <= 0.0001f) return;
+
         direction.Normalize();
+
         if (IsServer)
         {
             ServerHandleFireRequest(origin, direction);
             return;
         }
+
         RequestFireServerRpc(origin, direction);
     }
+
     [ServerRpc]
     private void RequestFireServerRpc(Vector3 origin, Vector3 direction)
-    => ServerHandleFireRequest(origin, direction);
+        => ServerHandleFireRequest(origin, direction);
+
     private void ServerHandleFireRequest(Vector3 origin, Vector3 direction)
     {
         if (!IsServer) return;
+        if (_damageableObject != null && _damageableObject.IsDead) return;
         if (ServerBulletPool.Instance == null) return;
         if (_equippedGunDefinition == null) return;
         if (direction.sqrMagnitude <= 0.0001f) return;
+
         float now = Time.time;
         float timeBetweenShots = Mathf.Max(0.01f, _equippedGunDefinition.TimeBetweenShots);
         if (now < _serverNextAllowedShotTime) return;
+
         direction.Normalize();
         _serverNextAllowedShotTime = now + timeBetweenShots;
+
         ServerBulletPool.Instance.SpawnBullet(
             origin,
             direction * _equippedGunDefinition.BulletVelocity,
@@ -389,6 +567,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             _equippedGunDefinition.BulletPenetration
         );
     }
+
     private void OnDrawGizmosSelected()
     {
         if (!_t) return;

@@ -6,7 +6,6 @@ public sealed class MenuUI : MonoBehaviour
     [Header("UI")]
     [SerializeField] private TMP_InputField _serverNameInput;
     [SerializeField] private TMP_InputField _joinCodeInput;
-    [SerializeField] private TMP_Text _currentJoinCodeText;
     [SerializeField] private TMP_Text _visibilityStateText;
     [SerializeField] private SessionBrowser _sessionBrowser;
 
@@ -16,16 +15,6 @@ public sealed class MenuUI : MonoBehaviour
     {
         RefreshVisibilityLabel();
     }
-
-    private void Update()
-    {
-        if (_currentJoinCodeText != null && NetBootstrap.Instance != null)
-        {
-            string code = NetBootstrap.Instance.CurrentSessionCode;
-            _currentJoinCodeText.text = string.IsNullOrWhiteSpace(code) ? "Code: ---" : $"Code: {code}";
-        }
-    }
-
     public void OnClickToggleVisibility()
     {
         _isPublic = !_isPublic;

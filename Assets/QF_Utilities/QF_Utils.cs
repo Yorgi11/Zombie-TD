@@ -19,6 +19,12 @@ namespace QF_Tools.QF_Utilities
             functionState.Item1?.Invoke();
             functionState.Item2?.Invoke(endState);
         }
+        public static IEnumerator DelayRunFunctionUntilTrue(Func<bool> condition, Action function)
+        {
+            while (!condition())
+                yield return null;
+            function?.Invoke();
+        }
         public static IEnumerator DelayBoolChange(bool startState, bool endState, float delay, Action<bool> onUpdate)
         {
             onUpdate?.Invoke(startState);

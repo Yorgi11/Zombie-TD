@@ -1,3 +1,4 @@
+using System;
 using Unity.Netcode;
 using UnityEngine;
 [RequireComponent(typeof(Rigidbody))]
@@ -70,7 +71,12 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private float _jumpLockUntil;
 
     private readonly Collider[] _groundHits = new Collider[8];
+
+    public event Action<int, int> OnAmmoChanged;
+    public event Action<float> OnHPChanged;
     public Vector3 SpawnPos { get; private set; }
+    public Gun CurrentGun => _currentGun;
+    public DamageableObject DamageableObject => _damageableObject;
     private void Awake()
     {
         _t = transform;
@@ -105,13 +111,21 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             {
                 _currentGun = Instantiate(_equippedGunDefinition, _equippedGunDefinition.HipPosition, Quaternion.identity, _camT);
                 _currentGun.OnShotRequested += HandleLocalShotRequested;
+                _currentGun.OnAmmoChanged += HandleGunAmmoChanged;
             }
+            OnAmmoChanged?.Invoke(_currentGun.CurrentAmmoInMag, _currentGun.CurrentReserveAmmo);
             if (_aimTarget != null && _camT != null) _aimTarget.SetParent(_camT, true);
             _nextInputSendTime = 0f;
             _lastSentMoveInput = new Vector2(999f, 999f);
             _lastSentYaw = float.MaxValue;
             _lastSentJumpInput = false;
             _lastSentMoveState = MoveState.Walking;
+        }
+        if (_damageableObject != null)
+        {
+            _damageableObject.OnHPChanged -= HandleHPChanged;
+            _damageableObject.OnHPChanged += HandleHPChanged;
+            OnHPChanged?.Invoke(_damageableObject.CurrentHP);
         }
         SpawnPos = _t.position;
         _damageableObject.Die += HandleDeath;
@@ -129,12 +143,16 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         if (_currentGun != null)
         {
             _currentGun.OnShotRequested -= HandleLocalShotRequested;
+            _currentGun.OnAmmoChanged -= HandleGunAmmoChanged;
             Destroy(_currentGun.gameObject);
             _currentGun = null;
         }
+        if (_damageableObject != null) _damageableObject.OnHPChanged -= HandleHPChanged;
         _cam = null;
         _camT = null;
     }
+    private void HandleGunAmmoChanged(int ammoInMag, int reserveAmmo) => OnAmmoChanged?.Invoke(ammoInMag, reserveAmmo);
+    private void HandleHPChanged(float hp) => OnHPChanged?.Invoke(hp);
     private void ToggleMouse()
     {
         switch (Cursor.lockState)
@@ -161,6 +179,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         if (!IsOwner) return;
         _t.position = SpawnPos;
+        _damageableObject.RestoreFullHP();
     }
     private void Update()
     {

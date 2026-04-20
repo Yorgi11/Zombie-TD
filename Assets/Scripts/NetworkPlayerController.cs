@@ -1,6 +1,5 @@
 using Unity.Netcode;
 using UnityEngine;
-
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(DamageableObject))]
 public sealed class NetworkPlayerController : NetworkBehaviour
@@ -31,6 +30,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     [SerializeField] private float _inputSendRate = 30f;
 
     private InputSystem_Actions _input;
+    private DamageableObject _damageableObject;
 
     private Transform _t;
     private Rigidbody _rb;
@@ -40,6 +40,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private Vector2 _moveInput;
     private Vector2 _lookInput;
+
+    private bool _menuInteract;
 
     private bool _jumpInput;
     private bool _attackHeld;
@@ -68,96 +70,71 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private float _jumpLockUntil;
 
     private readonly Collider[] _groundHits = new Collider[8];
-
+    public Vector3 SpawnPos { get; private set; }
     private void Awake()
     {
         _t = transform;
         _rb = GetComponent<Rigidbody>();
+        _damageableObject = GetComponent<DamageableObject>();
     }
-
-    public override void OnNetworkSpawn()
-    {
-        InitializeNetworkState();
-    }
-
-    public override void OnGainedOwnership()
-    {
-        InitializeNetworkState();
-    }
-
+    public override void OnNetworkSpawn() =>InitializeNetworkState();
+    public override void OnGainedOwnership() => InitializeNetworkState();
     public override void OnNetworkDespawn()
     {
         CleanupLocalOwnerState();
         _networkInitialized = false;
     }
-
-    public override void OnLostOwnership()
-    {
-        CleanupLocalOwnerState();
-    }
-
+    public override void OnLostOwnership() => CleanupLocalOwnerState();
     private void InitializeNetworkState()
     {
         if (!IsSpawned) return;
-
         if (!_networkInitialized)
         {
             _networkInitialized = true;
             if (GameManager.Instance != null && GameManager.Instance._guns != null && GameManager.Instance._guns.Length > 0)
                 _equippedGunDefinition = GameManager.Instance._guns[0];
         }
-
         if (IsOwner && !_localOwnerInitialized)
         {
             _localOwnerInitialized = true;
-
             _input ??= new();
             _input.Enable();
-
             ToggleMouse();
             SetupLocalCamera();
-
             if (_equippedGunDefinition != null && _camT != null)
             {
                 _currentGun = Instantiate(_equippedGunDefinition, _equippedGunDefinition.HipPosition, Quaternion.identity, _camT);
                 _currentGun.OnShotRequested += HandleLocalShotRequested;
             }
-
-            if (_aimTarget != null && _camT != null)
-                _aimTarget.SetParent(_camT, true);
-
+            if (_aimTarget != null && _camT != null) _aimTarget.SetParent(_camT, true);
             _nextInputSendTime = 0f;
             _lastSentMoveInput = new Vector2(999f, 999f);
             _lastSentYaw = float.MaxValue;
             _lastSentJumpInput = false;
             _lastSentMoveState = MoveState.Walking;
         }
+        SpawnPos = _t.position;
+        _damageableObject.Die += HandleDeath;
     }
-
     private void CleanupLocalOwnerState()
     {
         if (!_localOwnerInitialized) return;
-
         _localOwnerInitialized = false;
         _input?.Disable();
-
         if (IsOwner)
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-
         if (_currentGun != null)
         {
             _currentGun.OnShotRequested -= HandleLocalShotRequested;
             Destroy(_currentGun.gameObject);
             _currentGun = null;
         }
-
         _cam = null;
         _camT = null;
     }
-
     private void ToggleMouse()
     {
         switch (Cursor.lockState)
@@ -165,18 +142,29 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             case CursorLockMode.None:
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
+                _menuInteract = false;
                 break;
-
             case CursorLockMode.Locked:
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
+                _menuInteract = true;
                 break;
         }
     }
-
+    private void HandleDeath()
+    {
+        if (!IsOwner) return;
+        GameUI.Instance.ToggleDeathScreen();
+        ToggleMouse();
+    }
+    public void HandleRespawn()
+    {
+        if (!IsOwner) return;
+        _t.position = SpawnPos;
+    }
     private void Update()
     {
-        if (!IsSpawned || !IsOwner || !_localOwnerInitialized) return;
+        if (!IsSpawned || !IsOwner || !_localOwnerInitialized || _menuInteract) return;
         ReadLocalInput();
 
         UpdateCamera();
@@ -192,14 +180,14 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private void FixedUpdate()
     {
-        if (!IsSpawned || !IsServer) return;
+        if (!IsSpawned || !IsServer || _menuInteract) return;
         HandleJump();
         _t.rotation = Quaternion.Euler(0f, _serverYaw, 0f);
         FixedUpdateMovement();
     }
     private void LateUpdate()
     {
-        if (!IsSpawned || !IsOwner || !_localOwnerInitialized) return;
+        if (!IsSpawned || !IsOwner || !_localOwnerInitialized || _menuInteract) return;
         LateUpdateCamera();
     }
     private void ReadLocalInput()

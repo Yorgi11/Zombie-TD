@@ -1277,7 +1277,7 @@ MonoBehaviour:
   _playerPrefab: {fileID: 112565040871412906, guid: feca7961c8757ad418650c7716b1acb5, type: 3}
   _roamSpawnOrigin: {x: 0, y: 0, z: 0}
   _roamSpawnSpacing: 3
-  _finalSpawnOrigin: {x: 0, y: 1, z: 0}
+  _finalSpawnOrigin: {x: 0, y: 0, z: 0}
   _finalSpawnSpacing: 3
 --- !u!114 &598671972
 MonoBehaviour:

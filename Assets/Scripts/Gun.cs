@@ -1,7 +1,5 @@
 using System;
 using UnityEngine;
-using QF_Tools.QF_Utilities;
-
 public class Gun : MonoBehaviour
 {
     [Header("Stats")]
@@ -29,12 +27,15 @@ public class Gun : MonoBehaviour
     [SerializeField] private float _animationSnap = 20f;
     [SerializeField] private float _recoilReturnSpeed = 14f;
 
-    private bool _canShoot = true;
-    private bool _isReloading = false;
-    private bool _semiAutoTriggerLocked = false;
+    private bool _isReloading;
+    private bool _semiAutoTriggerLocked;
 
     private int _currentAmmoInMag;
     private int _currentReserveAmmo;
+
+    private float _timeBetweenShots;
+    private float _nextAllowedShotTime;
+    private float _reloadCompleteTime = -1f;
 
     private Transform _t;
 
@@ -47,27 +48,33 @@ public class Gun : MonoBehaviour
     private Vector3 _currentRecoilRotation;
     private Vector3 _targetRecoilRotation;
 
-    public float TimeBetweenShots => 1f / (_fireRate / 60f);
-    public Vector3 HipPosition => _hipPosition;
-
     public int BulletVelocity => _bulletVelocity;
     public int BulletDamage => _bulletDamage;
     public int BulletPenetration => _bulletPenetration;
+    public float TimeBetweenShots => _timeBetweenShots;
+    public Vector3 HipPosition => _hipPosition;
     public Transform BulletSpawn => _bulletSpawn;
-
     public event Action<Gun> OnShotRequested;
-
     private void Awake()
     {
         _t = transform;
+
         _currentAmmoInMag = _ammoPerMag;
         _currentReserveAmmo = _totalAmmo;
+
         _currentBasePosition = _hipPosition;
         _targetBasePosition = _hipPosition;
-    }
 
-    public void RunUpdate(bool isAiming, float dt, Vector3 aimTarget)
+        _timeBetweenShots = _fireRate > 0 ? (60f / _fireRate) : 999f;
+    }
+    public void RunUpdate(bool isAiming, float dt)
     {
+        if (_isReloading && Time.time >= _reloadCompleteTime)
+        {
+            _isReloading = false;
+            ExecuteReload();
+            _reloadCompleteTime = -1f;
+        }
         _targetBasePosition = isAiming ? _aimPosition : _hipPosition;
         _currentBasePosition = Vector3.Lerp(_currentBasePosition, _targetBasePosition, _aimTransitionSpeed * dt);
 
@@ -81,54 +88,44 @@ public class Gun : MonoBehaviour
         Quaternion finalLocalRot = Quaternion.Euler(_currentRecoilRotation);
         _t.SetLocalPositionAndRotation(finalLocalPos, finalLocalRot);
     }
-
     public void TryShoot()
     {
         if (_isSemiAuto && _semiAutoTriggerLocked) return;
         Shoot();
     }
-
-    public void ReleaseTrigger()
-    {
-        _semiAutoTriggerLocked = false;
-    }
-
+    public void ReleaseTrigger() => _semiAutoTriggerLocked = false;
     private void Shoot()
     {
-        if (!_canShoot || _isReloading || _currentAmmoInMag <= 0) return;
-
+        if (_isReloading) return;
+        if (_currentAmmoInMag <= 0)
+        {
+            if (_currentReserveAmmo > 0) Reload();
+            return;
+        }
+        if (Time.time < _nextAllowedShotTime) return;
+        _nextAllowedShotTime = Time.time + _timeBetweenShots;
         AddRecoil();
-
         _currentAmmoInMag--;
-        OnShotRequested?.Invoke(this);
 
+        OnShotRequested?.Invoke(this);
         if (_isSemiAuto) _semiAutoTriggerLocked = true;
         if (_currentAmmoInMag <= 0 && _currentReserveAmmo > 0) Reload();
-
-        StartCoroutine(QF_Coroutines.DelayBoolChange(false, true, TimeBetweenShots, v => _canShoot = v));
     }
-
     public void Reload()
     {
-        if (_isReloading || _currentReserveAmmo <= 0 || _currentAmmoInMag >= _ammoPerMag) return;
-
-        StartCoroutine(QF_Coroutines.DelayRunFunction(
-            true,
-            false,
-            _reloadTime,
-            (() => ExecuteReload(), v => _isReloading = v)
-        ));
+        if (_isReloading) return;
+        if (_currentReserveAmmo <= 0) return;
+        if (_currentAmmoInMag >= _ammoPerMag) return;
+        _isReloading = true;
+        _reloadCompleteTime = Time.time + _reloadTime;
     }
-
     private void ExecuteReload()
     {
         int missingAmmo = _ammoPerMag - _currentAmmoInMag;
         int ammoToAdd = Mathf.Min(missingAmmo, _currentReserveAmmo);
-
         _currentAmmoInMag += ammoToAdd;
         _currentReserveAmmo -= ammoToAdd;
     }
-
     private void AddRecoil()
     {
         _targetRecoilPosition += Vector3.back * _recoilSlide;

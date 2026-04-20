@@ -316,7 +316,9 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         if (_currentGun != null)
         {
-            _currentGun.RunUpdate(_isAiming, Time.deltaTime);
+            Vector3 aimWorldPoint = _aimTarget != null ?
+                _aimTarget.position : (_camT != null ? _camT.position + _camT.forward * 100f : transform.position + transform.forward * 100f);
+            _currentGun.RunUpdate(_isAiming, Time.deltaTime, aimWorldPoint);
             if (_attackHeld) _currentGun.TryShoot();
             if (_input.Player.Attack.WasReleasedThisFrame()) _currentGun.ReleaseTrigger();
         }

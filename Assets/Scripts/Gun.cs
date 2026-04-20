@@ -77,7 +77,7 @@ public class Gun : MonoBehaviour
         RaiseAmmoChanged();
     }
 
-    public void RunUpdate(bool isAiming, float dt)
+    public void RunUpdate(bool isAiming, float dt, Vector3 aimTargetWorld)
     {
         if (_isReloading && Time.time >= _reloadCompleteTime)
         {
@@ -96,8 +96,29 @@ public class Gun : MonoBehaviour
         _currentRecoilRotation = Vector3.Lerp(_currentRecoilRotation, _targetRecoilRotation, _animationSnap * dt);
 
         Vector3 finalLocalPos = _currentBasePosition + _currentRecoilPosition;
-        Quaternion finalLocalRot = Quaternion.Euler(_currentRecoilRotation);
-        _t.SetLocalPositionAndRotation(finalLocalPos, finalLocalRot);
+        _t.localPosition = finalLocalPos;
+
+        ApplyAimRotation(aimTargetWorld);
+    }
+
+    private void ApplyAimRotation(Vector3 aimTargetWorld)
+    {
+        Transform pivot = _bulletSpawn != null ? _bulletSpawn : _t;
+        Vector3 aimDir = aimTargetWorld - pivot.position;
+
+        if (aimDir.sqrMagnitude <= 0.0001f)
+        {
+            _t.localRotation = Quaternion.Euler(_currentRecoilRotation);
+            return;
+        }
+
+        aimDir.Normalize();
+
+        Vector3 up = _t.parent != null ? _t.parent.up : Vector3.up;
+        Quaternion lookRot = Quaternion.LookRotation(aimDir, up);
+        Quaternion recoilRot = Quaternion.Euler(_currentRecoilRotation);
+
+        _t.rotation = lookRot * recoilRot;
     }
 
     public void TryShoot()

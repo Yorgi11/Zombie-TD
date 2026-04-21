@@ -1382,6 +1382,10 @@ MonoBehaviour:
   _special1ZombiePrefab: {fileID: 0}
   _special2ZombiePrefab: {fileID: 0}
   _special3ZombiePrefab: {fileID: 0}
+  _prewarmRegular: 16
+  _prewarmSpecial1: 4
+  _prewarmSpecial2: 4
+  _prewarmSpecial3: 2
   _safePhaseTime: 15
   _waveInfos:
   - _enemyCountNTotal: 20
@@ -1396,7 +1400,7 @@ MonoBehaviour:
   _netBoot: {fileID: 598671971}
   _bulletHitMask:
     serializedVersion: 2
-    m_Bits: 1
+    m_Bits: 129
   _guns:
   - {fileID: 3447192829919185107, guid: 07034c3ce30383a49acac96ccd164a76, type: 3}
 --- !u!1 &780841174

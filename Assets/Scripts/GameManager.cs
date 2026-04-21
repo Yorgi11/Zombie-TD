@@ -42,9 +42,20 @@ public class GameManager : QF_Singleton<GameManager>
     [SerializeField] private Zombie _special2ZombiePrefab;
     [SerializeField] private Zombie _special3ZombiePrefab;
 
+    [SerializeField] private int _prewarmRegular = 16;
+    [SerializeField] private int _prewarmSpecial1 = 4;
+    [SerializeField] private int _prewarmSpecial2 = 4;
+    [SerializeField] private int _prewarmSpecial3 = 2;
+
     [Header("Wave Settings")]
     [SerializeField] private float _safePhaseTime = 15f;
     [SerializeField] private WaveInfo[] _waveInfos;
+
+    [Header("Points")]
+    [SerializeField] private int _pointsRegular = 100;
+    [SerializeField] private int _pointsSpecial1 = 200;
+    [SerializeField] private int _pointsSpecial2 = 500;
+    [SerializeField] private int _pointsSpecial3 = 1000;
 
     [Header("References")]
     [SerializeField] private NetBootstrap _netBoot;
@@ -187,6 +198,14 @@ public class GameManager : QF_Singleton<GameManager>
         EnsureBulletPool();
         RebuildServerPlayerList();
 
+        if (ZombiePoolManager.Instance != null)
+        {
+            if (_regularZombiePrefab) ZombiePoolManager.Instance.EnsurePool(EnemyType.Regular, _regularZombiePrefab, _prewarmRegular);
+            if (_special1ZombiePrefab) ZombiePoolManager.Instance.EnsurePool(EnemyType.Special1, _special1ZombiePrefab, _prewarmSpecial1);
+            if (_special2ZombiePrefab) ZombiePoolManager.Instance.EnsurePool(EnemyType.Special2, _special2ZombiePrefab, _prewarmSpecial2);
+            if (_special3ZombiePrefab) ZombiePoolManager.Instance.EnsurePool(EnemyType.Special3, _special3ZombiePrefab, _prewarmSpecial3);
+        }
+
         _canSpawnEnemies = true;
         _inSafePhase = false;
     }
@@ -251,29 +270,21 @@ public class GameManager : QF_Singleton<GameManager>
             return;
         }
 
-        Zombie prefab = GetPrefabForType(type);
-        if (prefab == null)
+        if (ZombiePoolManager.Instance == null)
         {
-            Debug.LogWarning($"[GameManager] No prefab assigned for enemy type {type}.");
+            Debug.LogError("[GameManager] ZombiePoolManager.Instance is null.");
             return;
         }
 
         int randIndex = UnityEngine.Random.Range(0, Map.Instance.SpawnPoints.Length);
         Transform spawnPoint = Map.Instance.SpawnPoints[randIndex];
+
         Vector3 spawnPos = spawnPoint != null ? spawnPoint.position : Vector3.zero;
         Quaternion spawnRot = spawnPoint != null ? spawnPoint.rotation : Quaternion.identity;
 
-        Zombie zombie = Instantiate(prefab, spawnPos, spawnRot);
-        zombie.InitializeServer(type);
-
-        if (!zombie.TryGetComponent<NetworkObject>(out var networkObject))
-        {
-            Debug.LogError($"[GameManager] Zombie prefab '{prefab.name}' is missing a NetworkObject.");
-            Destroy(zombie.gameObject);
+        Zombie zombie = ZombiePoolManager.Instance.SpawnZombie(spawnPos, spawnRot, type);
+        if (zombie == null)
             return;
-        }
-
-        networkObject.Spawn(true);
 
         switch (type)
         {
@@ -343,27 +354,52 @@ public class GameManager : QF_Singleton<GameManager>
         _safePhaseTimer = 0f;
     }
 
-    public void OnEnemyKilled(EnemyType type)
+    public void OnEnemyKilled(EnemyType type, ulong killerClientId)
     {
         switch (type)
         {
             case EnemyType.Regular:
                 _currentNCount = Mathf.Max(0, _currentNCount - 1);
+                AwardPoints(killerClientId, _pointsRegular);
                 break;
 
             case EnemyType.Special1:
                 _currentSp1Count = Mathf.Max(0, _currentSp1Count - 1);
+                AwardPoints(killerClientId, _pointsSpecial1);
                 break;
 
             case EnemyType.Special2:
                 _currentSp2Count = Mathf.Max(0, _currentSp2Count - 1);
+                AwardPoints(killerClientId, _pointsSpecial2);
                 break;
 
             case EnemyType.Special3:
                 _currentSp3Count = Mathf.Max(0, _currentSp3Count - 1);
+                AwardPoints(killerClientId, _pointsSpecial3);
                 break;
         }
 
         CheckWaveCompletion();
+    }
+    private void AwardPoints(ulong clientId, int points)
+    {
+        if (_netBoot == null || !_netBoot.IsServer)
+            return;
+
+        if (points <= 0)
+            return;
+
+        for (int i = 0; i < _serverPlayers.Count; i++)
+        {
+            NetworkPlayerController player = _serverPlayers[i];
+            if (player == null || !player.IsSpawned)
+                continue;
+
+            if (player.OwnerClientId != clientId)
+                continue;
+
+            player.AddPoints(points);
+            return;
+        }
     }
 }

@@ -17,21 +17,26 @@ public class Zombie : NetworkBehaviour
 
     private NavMeshAgent _navMeshAgent;
     private DamageableObject _damageableObject;
+    private Collider[] _colliders;
+    private Renderer[] _renderers;
 
     private float _targetPlayerDistanceSqr;
     private float _nextRetargetTime;
     private float _nextDestinationRefreshTime;
 
-    private bool _serverInitialized;
     private bool _deathHandled;
+    private bool _pooledActive;
 
     private GameManager.EnemyType _enemyType = GameManager.EnemyType.Regular;
+    public GameManager.EnemyType EnemyType => _enemyType;
 
     private void Awake()
     {
         _t = transform;
         _navMeshAgent = GetComponent<NavMeshAgent>();
         _damageableObject = GetComponent<DamageableObject>();
+        _colliders = GetComponentsInChildren<Collider>(true);
+        _renderers = GetComponentsInChildren<Renderer>(true);
         _targetPlayerDistanceSqr = _targetPlayerDistance * _targetPlayerDistance;
     }
 
@@ -51,7 +56,11 @@ public class Zombie : NetworkBehaviour
             return;
         }
 
-        ServerInitialize();
+        if (_damageableObject != null)
+        {
+            _damageableObject.Die -= HandleDeathServer;
+            _damageableObject.Die += HandleDeathServer;
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -60,29 +69,92 @@ public class Zombie : NetworkBehaviour
             _damageableObject.Die -= HandleDeathServer;
     }
 
-    private void ServerInitialize()
+    public void OnTakenFromPool(Vector3 position, Quaternion rotation)
     {
-        if (_serverInitialized)
+        if (!IsServer)
             return;
 
-        _serverInitialized = true;
+        _pooledActive = true;
         _deathHandled = false;
 
-        if (GameManager.Instance != null)
-            _tower = GameManager.Instance.Tower;
+        gameObject.SetActive(true);
+        _t.SetPositionAndRotation(position, rotation);
+
+        SetVisualsAndColliders(true);
+
+        _tower = GameManager.Instance != null ? GameManager.Instance.Tower : null;
+        _currentTarget = null;
+        _nextRetargetTime = 0f;
+        _nextDestinationRefreshTime = 0f;
 
         if (_damageableObject != null)
+            _damageableObject.RestoreFullHP();
+
+        if (_navMeshAgent != null)
         {
-            _damageableObject.Die -= HandleDeathServer;
-            _damageableObject.Die += HandleDeathServer;
+            _navMeshAgent.enabled = true;
+
+            if (_navMeshAgent.isOnNavMesh)
+            {
+                _navMeshAgent.ResetPath();
+                _navMeshAgent.Warp(position);
+            }
+            else
+            {
+                NavMeshHit hit;
+                if (NavMesh.SamplePosition(position, out hit, 3f, NavMesh.AllAreas))
+                {
+                    _t.position = hit.position;
+                    _navMeshAgent.Warp(hit.position);
+                }
+            }
         }
 
-        RestoreZombieState();
+        SelectBestTarget();
+        UpdateDestination();
+    }
+
+    public void OnReturnedToPool()
+    {
+        if (!IsServer)
+            return;
+
+        _pooledActive = false;
+        _currentTarget = null;
+
+        if (_navMeshAgent != null)
+        {
+            if (_navMeshAgent.isOnNavMesh)
+                _navMeshAgent.ResetPath();
+
+            _navMeshAgent.enabled = false;
+        }
+
+        SetVisualsAndColliders(false);
+        gameObject.SetActive(false);
+    }
+
+    private void SetVisualsAndColliders(bool enabledState)
+    {
+        for (int i = 0; i < _colliders.Length; i++)
+        {
+            if (_colliders[i] != null)
+                _colliders[i].enabled = enabledState;
+        }
+
+        for (int i = 0; i < _renderers.Length; i++)
+        {
+            if (_renderers[i] != null)
+                _renderers[i].enabled = enabledState;
+        }
     }
 
     private void Update()
     {
-        if (!IsServer)
+        if (!IsServer || !_pooledActive)
+            return;
+
+        if (_damageableObject != null && _damageableObject.IsDead)
             return;
 
         if (Time.time >= _nextRetargetTime)
@@ -147,35 +219,16 @@ public class Zombie : NetworkBehaviour
 
     private void UpdateDestination()
     {
-        if (!IsServer)
+        if (!IsServer || !_pooledActive)
             return;
 
-        if (_currentTarget == null || _navMeshAgent == null || !_navMeshAgent.isOnNavMesh)
+        if (_currentTarget == null || _navMeshAgent == null || !_navMeshAgent.enabled || !_navMeshAgent.isOnNavMesh)
             return;
 
         _navMeshAgent.SetDestination(_currentTarget.position);
     }
 
-    public void RestoreZombieState()
-    {
-        if (!IsServer)
-            return;
-
-        if (_navMeshAgent != null && _navMeshAgent.isOnNavMesh)
-            _navMeshAgent.ResetPath();
-
-        if (_damageableObject != null)
-            _damageableObject.RestoreFullHP();
-
-        _tower = GameManager.Instance != null ? GameManager.Instance.Tower : null;
-        _currentTarget = null;
-        _nextRetargetTime = 0f;
-        _nextDestinationRefreshTime = 0f;
-
-        SelectBestTarget();
-    }
-
-    private void HandleDeathServer()
+    private void HandleDeathServer(ulong killerClientId)
     {
         if (!IsServer || _deathHandled)
             return;
@@ -183,11 +236,11 @@ public class Zombie : NetworkBehaviour
         _deathHandled = true;
 
         if (GameManager.Instance != null)
-            GameManager.Instance.OnEnemyKilled(_enemyType);
+            GameManager.Instance.OnEnemyKilled(_enemyType, killerClientId);
 
-        if (NetworkObject != null && NetworkObject.IsSpawned)
-            NetworkObject.Despawn(true);
+        if (ZombiePoolManager.Instance != null)
+            ZombiePoolManager.Instance.ReturnZombie(this);
         else
-            Destroy(gameObject);
+            gameObject.SetActive(false);
     }
 }

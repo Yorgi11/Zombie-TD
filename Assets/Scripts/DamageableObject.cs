@@ -1,57 +1,73 @@
-using QF_Tools.QF_Utilities;
 using System;
+using Unity.Netcode;
 using UnityEngine;
+
 public class DamageableObject : MonoBehaviour
 {
-    [SerializeField] private bool _isPlayer;
-    [SerializeField] private float _maxHp;
-    private NetworkPlayerController _netPlayer;
+    [SerializeField] private float _maxHp = 100f;
+    [SerializeField] private bool _serverAuthoritative = true;
 
-    public Action Die;
+    private NetworkObject _networkObject;
+
+    public event Action<ulong> Die;
+    public event Action<float> OnHPChanged;
+
     public float CurrentHP { get; private set; }
     public float MaxHP => _maxHp;
     public bool IsDead => CurrentHP <= 0f;
 
-    public event Action<float> OnHPChanged;
-
     private void Awake()
     {
-        if (!_netPlayer && _isPlayer) gameObject.TryGetComponentInChildren<NetworkPlayerController>(out _netPlayer);
+        _networkObject = GetComponentInParent<NetworkObject>();
         CurrentHP = _maxHp;
         RaiseHPChanged();
     }
 
-    public bool TakeDamage(float damage)
+    public bool TakeDamage(float damage, ulong attackerClientId)
     {
-        if (damage <= 0f || IsDead && _isPlayer) return false;
+        if (damage <= 0f || IsDead)
+            return false;
+
+        if (_serverAuthoritative && !HasServerAuthority())
+            return false;
 
         CurrentHP -= damage;
 
-        bool died = CurrentHP <= 0f;
-        if (died && _isPlayer) CurrentHP = 0f;
-
-        RaiseHPChanged();
-        if (_netPlayer && _isPlayer) _netPlayer.ServerSyncHealthState();
-
-        if (died)
+        if (CurrentHP <= 0f)
         {
-            if (_isPlayer) Die?.Invoke();
-            gameObject.SetActive(false);
+            CurrentHP = 0f;
+            RaiseHPChanged();
+            Die?.Invoke(attackerClientId);
             return true;
         }
 
+        RaiseHPChanged();
         return false;
     }
 
     public void RestoreFullHP()
     {
+        if (_serverAuthoritative && !HasServerAuthority())
+            return;
+
         CurrentHP = _maxHp;
         RaiseHPChanged();
-        if (_netPlayer && _isPlayer) _netPlayer.ServerSyncHealthState();
     }
 
     private void RaiseHPChanged()
     {
         OnHPChanged?.Invoke(CurrentHP);
+    }
+
+    private bool HasServerAuthority()
+    {
+        if (_networkObject == null)
+            return true;
+
+        if (!_networkObject.IsSpawned)
+            return true;
+
+        return _networkObject.NetworkManager != null &&
+               _networkObject.NetworkManager.IsServer;
     }
 }

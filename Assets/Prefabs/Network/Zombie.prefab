@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 2806170473631631862}
   - component: {fileID: 8454600031337680090}
   - component: {fileID: 797626582508014283}
-  - component: {fileID: 5360514599288082282}
+  - component: {fileID: 4359169010095801095}
   m_Layer: 7
   m_Name: Zombie
   m_TagString: Untagged
@@ -112,9 +112,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 97977281051e758498833ac280ce622b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DamageableObject
-  _isPlayer: 0
   _maxHp: 100
---- !u!114 &5360514599288082282
+  _syncOwnerPlayerHealth: 0
+--- !u!114 &4359169010095801095
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

@@ -220,7 +220,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _deathMenuVisible = visible;
     }
 
-    private void HandleDeath()
+    private void HandleDeath(ulong killerID)
     {
         if (!IsOwner) return;
         if (_isDeadLocal) return;
@@ -310,6 +310,22 @@ public sealed class NetworkPlayerController : NetworkBehaviour
                 CancelLocalCombatInput();
             }
         }
+    }
+
+    public void AddPoints(int amount)
+    {
+        if (!IsServer || amount <= 0)
+            return;
+
+        _points += amount;
+        OnPointsChanged?.Invoke(_points);
+        SyncPointsClientRpc(_points);
+    }
+    [ClientRpc]
+    private void SyncPointsClientRpc(int newPoints)
+    {
+        _points = newPoints;
+        OnPointsChanged?.Invoke(_points);
     }
 
     private void CancelLocalCombatInput()
@@ -585,7 +601,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             origin,
             direction * _equippedGunDefinition.BulletVelocity,
             _equippedGunDefinition.BulletDamage,
-            _equippedGunDefinition.BulletPenetration
+            _equippedGunDefinition.BulletPenetration,
+            OwnerClientId
         );
     }
 

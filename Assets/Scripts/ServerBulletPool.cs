@@ -9,6 +9,7 @@ public class ServerBulletPool : QF_Singleton<ServerBulletPool>
     public LayerMask BulletHitMask;
     private class ServerBullet
     {
+        public ulong ShooterClientId;
         public int _penetration;
         public float _damage;
         public float _currentFlightTime;
@@ -48,22 +49,29 @@ public class ServerBulletPool : QF_Singleton<ServerBulletPool>
         b.Reset();
         _reserveBullets.Add(b);
     }
-    public void SpawnBullet(Vector3 position, Vector3 velocity, float damage, int penetration)
+    public void SpawnBullet(
+    Vector3 position,
+    Vector3 velocity,
+    float damage,
+    int penetration,
+    ulong shooterClientId)
     {
-        if (_reserveBullets.Count <= 0) AddBullet();
+        if (_reserveBullets.Count <= 0)
+            AddBullet();
 
-        ServerBullet b = _reserveBullets[^1];
-        _reserveBullets.RemoveAt(_reserveBullets.Count - 1);
+        int last = _reserveBullets.Count - 1;
+        ServerBullet bullet = _reserveBullets[last];
+        _reserveBullets.RemoveAt(last);
 
-        b._position = position;
-        b._lastPosition = position;
-        b._velocity = velocity;
-        b._damage = damage;
-        b._penetration = penetration;
-        b._currentFlightTime = 0f;
-        b._hitObjs.Clear();
+        bullet.Reset();
+        bullet._position = position;
+        bullet._lastPosition = position;
+        bullet._velocity = velocity;
+        bullet._damage = damage;
+        bullet._penetration = penetration;
+        bullet.ShooterClientId = shooterClientId;
 
-        _activeBullets.Add(b);
+        _activeBullets.Add(bullet);
     }
     public void UpdateBullets(float dt)
     {
@@ -97,7 +105,7 @@ public class ServerBulletPool : QF_Singleton<ServerBulletPool>
                 if (!col || !col.TryGetComponentInParent<DamageableObject>(out var d) || AlreadyHit(b._hitObjs, d)) continue;
 
                 b._hitObjs.Add(d);
-                d.TakeDamage(b._damage);
+                d.TakeDamage(b._damage, b.ShooterClientId);
 
                 b._position = _hits[h].point;
                 b._velocity *= 0.8f;

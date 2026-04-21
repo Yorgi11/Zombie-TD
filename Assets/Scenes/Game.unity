@@ -204,6 +204,7 @@ GameObject:
   m_Component:
   - component: {fileID: 307257002}
   - component: {fileID: 307257001}
+  - component: {fileID: 307257003}
   m_Layer: 0
   m_Name: Map
   m_TagString: Untagged
@@ -252,6 +253,19 @@ Transform:
   - {fileID: 1307964242}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &307257003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 307257000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e2ba2d5e58862740aed0dee0453f819, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ZombiePoolManager
+  _configs: []
 --- !u!1 &337591940
 GameObject:
   m_ObjectHideFlags: 0

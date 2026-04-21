@@ -1,291 +1,414 @@
 # Zombie TD
 
-Zombie TD is a co-op first-person survival prototype that combines wave-based zombie combat with defensive preparation and server-based multiplayer flow.
+Zombie TD is a multiplayer co-op FPS survival prototype built in Unity. Players join a lobby, launch into a shared game scene, fight off waves of zombies, earn points for kills, and respawn after death while the server remains authoritative over core gameplay systems.
 
-Built in Unity, the project is currently focused on the core online session flow, player spawning, first-person movement, and a lightweight server browser system that supports saved direct-connect entries with live status polling.
+The project combines:
+- first-person shooter combat
+- wave-based zombie survival
+- light tower-defense style structure
+- online co-op session flow for up to 4 players
 
-The long-term design direction is a hybrid of:
-- FPS combat
-- tower defense style preparation
-- wave survival
-- 1–4 player co-op
-
-The design foundation for the project is a wave-based survival game where players survive escalating zombie rounds by combining gunplay, teamwork, and defensive placement. The current target structure is 20 waves, with players earning resources between rounds to improve weapons, upgrades, and defenses. :contentReference[oaicite:0]{index=0}
-
----
-
-## Current Project Status
-
-This repository is currently centered on the multiplayer and bootstrap foundation rather than the full zombie gameplay loop.
-
-Implemented or partially implemented systems include:
-
-- Unity Netcode bootstrap and transport setup
-- host, client, and server startup flow
-- automatic transition into the game scene
-- authoritative player spawning on the server
-- first-person networked movement and jumping
-- server browser with saved direct-connect entries
-- periodic UDP server status pinging
-- runtime server display name propagation to clients
-- menu hooks for hosting, joining, refreshing, loading, and shutdown
-
-The current menu flow allows a player to:
-- host a session with a custom server name
-- connect to an entered IP
-- refresh the server browser
-- load into the game scene
-- shut down any active session state :contentReference[oaicite:1]{index=1}
+At its current stage, the repo already contains the core loop foundation:
+- multiplayer session hosting and joining
+- lobby-to-game scene flow
+- server-authoritative player movement and combat
+- pooled zombie spawning
+- wave progression
+- points, HP, death, and respawn
+- in-game UI for wave, ammo, HP, and score
 
 ---
 
-## Vision
+## Overview
 
-The intended full game is a 1–4 player co-op FPS / tower defense survival experience for PC. Players will prepare during safe phases, spend resources, build defenses, and survive increasingly difficult zombie waves. Planned systems include weapons, traps, enemy variety, progression, and multiple maps. :contentReference[oaicite:2]{index=2}
+Zombie TD is designed as a co-op wave survival game where players defend against escalating zombie rounds. The codebase currently focuses on building the full gameplay backbone rather than only menu or networking scaffolding.
 
-The current repo should be viewed as the networking and session-management foundation for that larger game.
-
----
-
-## Core Features in This Repo
-
-### 1. Network Bootstrap
-`NetBootstrap` is the central networking entry point for the project.
-
-It currently handles:
-- singleton setup
-- `NetworkManager` and `UnityTransport` initialization
-- host, client, and dedicated server startup
-- connection approval
-- shutdown and cleanup
-- server scene loading
-- player spawning for connected clients
-- UDP status responder for the server browser
-
-It also supports setting a custom server display name, which is included in the status response used by the browser. :contentReference[oaicite:3]{index=3}
-
-### 2. Server Browser
-The server browser system lets users save direct-connect servers locally and periodically ping them for availability.
-
-Current behavior:
-- stores saved servers in JSON under `Application.persistentDataPath`
-- rebuilds UI from saved entries on startup
-- refreshes every 5 seconds while in the `Bootstrap` scene
-- supports manual refresh
-- sends a UDP status request to `port + 1`
-- updates server name, ping, status, and player count in the UI
-- disables joining when a server is offline or unknown :contentReference[oaicite:4]{index=4} :contentReference[oaicite:5]{index=5}
-
-### 3. Saved Server Data Model
-Saved server entries store:
-- server name
-- IP
-- port
-
-The status request / response format is also defined in the shared saved server data model. :contentReference[oaicite:6]{index=6}
-
-### 4. Menu Integration
-The menu UI currently exposes buttons for:
-- host
-- join
-- load game
-- shutdown
-- refresh servers
-
-Hosting can optionally use a custom server name entered through the UI. :contentReference[oaicite:7]{index=7}
-
-### 5. Networked First-Person Player Controller
-`NetworkPlayerController` is a server-authoritative `NetworkBehaviour` with local-owner input and camera handling.
-
-Current movement/controller features include:
-- walking
-- sprinting
-- crouch state selection
-- mouse-look
-- jump buffering
-- grounding checks
-- server-side movement application
-- server-side jump handling
-- local camera setup for the owning player
-- clamped client look input submission for validation
-
-The server remains authoritative over movement and jump behavior, while the owning client handles local input and camera updates. :contentReference[oaicite:8]{index=8}
+The current implementation includes:
+- Unity Services session hosting and joining
+- Relay-backed multiplayer sessions
+- lobby management and scene transitions
+- server-authoritative player spawning and movement
+- server-authoritative bullet simulation and damage
+- zombie AI target selection and navigation
+- zombie object pooling
+- wave spawning with support for multiple enemy types
+- player scoring and kill rewards
+- player death and respawn flow
+- local player HUD and death screen
 
 ---
 
-## Repository Structure
+## Current Gameplay State
 
-The exact folder structure may vary, but the uploaded core scripts currently include:
+A typical gameplay flow currently looks like this:
 
-- `NetBootstrap.cs`  
-  Main network/session bootstrap and server status responder. :contentReference[oaicite:9]{index=9}
+1. A host creates a session.
+2. Other players join by session code or public session browser entry.
+3. The server loads the lobby.
+4. The host starts the match.
+5. All players are moved into the game scene and assigned spawn positions.
+6. The server begins spawning waves of zombies.
+7. Players shoot zombies, earn points, take damage, die, and respawn.
+8. The wave system advances until all configured waves are completed.
 
-- `MenuUI.cs`  
-  Menu button handlers for hosting, joining, loading, shutdown, and refreshing. :contentReference[oaicite:10]{index=10}
-
-- `ServerBrowser.cs`  
-  Saved server list management, UI rebuilding, periodic refresh loop, and UDP query logic. :contentReference[oaicite:11]{index=11}
-
-- `ServerEntryUI.cs`  
-  UI binding and visual state updates for each saved server entry. :contentReference[oaicite:12]{index=12}
-
-- `SavedServerData.cs`  
-  Serializable models for saved server entries and status messages. :contentReference[oaicite:13]{index=13}
-
-- `NetworkPlayerController.cs`  
-  Networked server-authoritative player controller with local-owner input and camera logic. :contentReference[oaicite:14]{index=14}
-
-- `LobbyState.cs`  
-  Placeholder script for future lobby state management. :contentReference[oaicite:15]{index=15}
+This means the project already goes beyond a raw networking prototype and into a real playable combat testbed.
 
 ---
 
-## Scene Flow
+## Core Systems
 
-Based on the current scripts, the intended flow is:
+## Multiplayer Session Bootstrap
 
-1. Launch into the `Bootstrap` scene
-2. Host starts a server or player joins a server by IP
-3. Host/server starts listening
-4. Browser status polling becomes available on UDP `port + 1`
-5. Once connected, the server loads the `Game` scene
-6. Connected clients are spawned into the game scene automatically :contentReference[oaicite:16]{index=16}
+`NetBootstrap` is the main multiplayer entry point for the project.
 
-### Current scene names referenced in code
-- `Bootstrap`
-- `Game` :contentReference[oaicite:17]{index=17} :contentReference[oaicite:18]{index=18}
+It is responsible for:
+- initializing Unity Services and anonymous authentication
+- creating and joining multiplayer sessions
+- tracking the current session code
+- handling host/server startup flow
+- moving connected players through lobby and game scenes
+- reserving spawn positions for connected players
+- spawning or relocating player objects during scene transitions
 
-These scenes must exist and be added to Unity build settings for the current flow to work correctly.
-
----
-
-## Networking Notes
-
-### Transport
-The project uses:
+The project currently uses:
 - Unity Netcode for GameObjects
-- Unity Transport (`UnityTransport`) :contentReference[oaicite:19]{index=19}
-
-### Default Port
-The current default gameplay/network port is:
-
-- `7777`
-
-The server browser status responder listens on:
-
-- `7778` by default (`port + statusPortOffset`) :contentReference[oaicite:20]{index=20}
-
-### Hosting / Joining
-- Host binds to `0.0.0.0`
-- Client connects to the entered or default IP
-- Dedicated server startup is also supported in code :contentReference[oaicite:21]{index=21}
+- Unity Transport
+- Unity Multiplayer Services sessions / relay flow
 
 ---
 
-## Server Browser Behavior
+## Lobby and Match Flow
 
-The browser stores saved servers in:
+The project supports a basic lobby pipeline before gameplay begins.
 
-`Application.persistentDataPath/saved_servers.json` :contentReference[oaicite:22]{index=22}
+Current flow:
+- host creates a session
+- clients join by code or public session entry
+- server loads the lobby scene
+- host selects or confirms game settings
+- host starts the match
+- all players are spawned into the game scene
+- `GameManager` initializes gameplay systems when all clients have loaded
 
-Each saved entry contains:
-- `Name`
-- `IP`
-- `Port` :contentReference[oaicite:23]{index=23}
-
-When refreshing:
-- the client sends a UDP JSON request
-- the server responds with name, current players, and max players
-- the UI updates each entry accordingly :contentReference[oaicite:24]{index=24} :contentReference[oaicite:25]{index=25}
-
----
-
-## Requirements
-
-This repo currently assumes:
-
-- Unity project setup with Netcode for GameObjects
-- Unity Transport package
-- TextMeshPro
-- scenes named `Bootstrap` and `Game`
-- a `NetworkManager` and `UnityTransport` attached to the bootstrap object
-- a valid player `NetworkObject` prefab assigned in `NetBootstrap`
-- menu and browser UI wired in the Unity inspector :contentReference[oaicite:26]{index=26} :contentReference[oaicite:27]{index=27} :contentReference[oaicite:28]{index=28}
+`LobbyState` handles the visible lobby state and exposes the current join code to the UI.
 
 ---
 
-## Setup
+## Server-Authoritative Player Controller
 
-### Basic Setup
-1. Open the project in Unity.
-2. Make sure the required multiplayer packages are installed.
-3. Add both `Bootstrap` and `Game` scenes to build settings.
-4. Create a bootstrap object with:
-   - `NetworkManager`
-   - `UnityTransport`
-   - `NetBootstrap`
-5. Assign the player prefab in `NetBootstrap`.
-6. Wire the menu input fields and buttons to `MenuUI`.
-7. Wire the server browser fields, entry parent, and entry prefab to `ServerBrowser`.
-8. Make sure the server entry prefab is configured with `ServerEntryUI`.
+`NetworkPlayerController` is the main networked FPS player controller.
 
-### Player Setup
-The player prefab should include:
+Implemented features include:
+- owner-controlled local input
+- first-person camera setup
+- walking, running, and crouch movement states
+- jumping with buffered input
+- server-authoritative movement
+- server-authoritative yaw/input application
+- local gun handling for the owning player
+- death-state handling
+- respawn requests
+- point synchronization
+- HP and ammo event hooks for UI
+
+The local client reads input and sends authoritative movement data to the server, while the server applies final movement and health state.
+
+---
+
+## Weapons and Shooting
+
+`Gun` handles the local weapon state and presentation.
+
+Current functionality includes:
+- fire rate handling
+- semi-auto support
+- ammo per magazine and reserve ammo
+- reload timing
+- aim and hip positions
+- recoil animation
+- aim rotation toward target point
+- shot request events
+- ammo change events for UI
+
+The weapon requests shots, but the actual combat resolution is handled server-side.
+
+---
+
+## Server Bullet Simulation
+
+`ServerBulletPool` handles active bullets on the server.
+
+Current responsibilities:
+- pooled bullet allocation
+- bullet flight updates
+- gravity application
+- hit detection using raycasts
+- penetration tracking
+- per-bullet hit tracking to prevent duplicate hits
+- damage application through `DamageableObject`
+
+This keeps combat authoritative and ensures that hit resolution and damage are decided by the server rather than the client.
+
+---
+
+## Health, Damage, Death, and Respawn
+
+`DamageableObject` is the shared health component used by players and enemies.
+
+It currently supports:
+- max HP and current HP
+- server-authoritative damage checks
+- death event callbacks
+- HP change callbacks
+- full HP restoration
+
+Player death flow:
+- player HP reaches zero
+- local death UI is shown
+- local movement/combat interaction is disabled
+- player can request a respawn
+- the server restores position, velocity, and HP
+- the death menu is hidden again on the owning client
+
+Enemy death flow:
+- the zombie reports the kill to `GameManager`
+- the killer receives points
+- the zombie is returned to its pool instead of destroyed
+
+---
+
+## Wave System
+
+`GameManager` controls the main PvE flow.
+
+Implemented wave features include:
+- per-wave enemy counts
+- support for four enemy categories
+- configurable spawn interval
+- safe phase timing between waves
+- current wave tracking
+- kill reward values by enemy type
+- server-side spawning only
+- wave completion checks
+- end-of-waves shutdown of further spawning
+
+Enemy categories currently defined:
+- `Regular`
+- `Special1`
+- `Special2`
+- `Special3`
+
+The system is designed so different zombie prefabs can be assigned and prewarmed independently.
+
+---
+
+## Zombie AI and Pooling
+
+### Zombie AI
+`Zombie` currently includes:
+- NavMeshAgent-based movement
+- automatic target selection
+- prioritization of nearby alive players
+- fallback targeting of the tower objective
+- destination refresh and retarget timing
+- server-only AI updates
+- death handling through `DamageableObject`
+
+### Zombie Pooling
+`ZombiePoolManager` and `ZombiePool` provide:
+- per-enemy-type pools
+- configurable prewarm counts
+- reuse of spawned zombie objects
+- pooled activation/deactivation
+- return-to-pool on death
+
+This avoids repeated instantiate/destroy churn during large wave spawning.
+
+---
+
+## Map and Objective
+
+`Map` exposes scene references used by gameplay systems:
+- zombie spawn points
+- the tower transform
+
+Zombies can target either:
+- the nearest valid player within range
+- or the tower as the default objective
+
+This gives the project its tower-defense style pressure structure even in its current prototype state.
+
+---
+
+## UI Systems
+
+### Main Menu / Session UI
+`MenuUI` currently supports:
+- entering a server/session name
+- entering a join code
+- toggling public/private visibility
+- hosting a session
+- joining a session by code
+- refreshing the browser
+- copying the session code
+- shutting down the active session
+
+### Session Browser
+`SessionBrowser` and `ServerEntryUI` support:
+- querying public sessions
+- rebuilding browser UI entries
+- displaying session name and player counts
+- refresh loops while in the bootstrap scene
+- joining a selected public session
+- visible session status feedback
+
+### In-Game UI
+`GameUI` currently displays:
+- death screen
+- respawn button
+- current wave
+- points
+- ammo
+- HP slider
+
+The in-game HUD binds itself to the local owning player and updates dynamically from ammo, HP, and points events.
+
+---
+
+## Included Core Scripts
+
+The uploaded project currently centers around these scripts:
+
+- `NetBootstrap.cs` — multiplayer bootstrap, session flow, scene transitions
+- `LobbyState.cs` — lobby UI state and start-game flow
+- `MenuUI.cs` — main menu controls for hosting and joining
+- `SessionBrowser.cs` — public session query and UI rebuilding
+- `ServerEntryUI.cs` — browser entry display and join hooks
+- `MainMenu.cs` — simple scene entry / quit controls
+- `GameManager.cs` — wave control, enemy spawning, bullet pool setup, scoring
+- `Map.cs` — scene references for spawn points and tower
+- `NetworkPlayerController.cs` — server-authoritative networked FPS controller
+- `Gun.cs` — weapon logic, ammo, aiming, recoil, shot requests
+- `ServerBulletPool.cs` — pooled server bullet simulation
+- `DamageableObject.cs` — health, damage, death events
+- `Zombie.cs` — AI target logic, NavMesh movement, pool return on death
+- `ZombiePoolManager.cs` — zombie pools by enemy type
+- `GameUI.cs` — local player HUD and death/respawn UI
+
+---
+
+## Scene Setup
+
+The code currently references these scenes:
+- `Bootstrap`
+- `Lobby`
+- `Game`
+
+These should all exist in Build Settings.
+
+Recommended flow:
+- **Bootstrap**: main menu, session browser, host/join UI, bootstrap object
+- **Lobby**: waiting room / match start screen
+- **Game**: playable wave survival map
+
+---
+
+## Unity Setup Requirements
+
+The project expects a Unity scene setup roughly like this:
+
+### Bootstrap Object
+A persistent bootstrap object should include:
+- `NetworkManager`
+- `UnityTransport`
+- `NetBootstrap`
+
+### Player Prefab
+The player prefab should include at minimum:
 - `NetworkObject`
 - `Rigidbody`
-- a `CapsuleCollider` on self or child
+- `DamageableObject`
 - `NetworkPlayerController`
-- a valid camera target transform for first-person camera placement :contentReference[oaicite:29]{index=29}
+- a valid camera target transform
+- a valid aim target transform
+- collider setup appropriate for the controller
+
+### Game Scene
+The game scene should include:
+- `GameManager`
+- `Map`
+- `ZombiePoolManager`
+- UI canvas with `GameUI`
+- configured spawn points
+- configured tower transform
+- valid zombie prefabs for each enemy type
+- any required NavMesh data for zombie navigation
+
+### Enemy Prefabs
+Zombie prefabs should include:
+- `NetworkObject`
+- `DamageableObject`
+- `NavMeshAgent`
+- `Zombie`
+- colliders/renderers that can be enabled/disabled on pool take/return
 
 ---
 
-## Running the Project
+## How to Run
 
-### Host
-- Enter a server name in the host field if desired
-- Click **Host**
-- The host starts listening and can transition into the game scene
-- The host’s custom server name becomes the browser-visible display name for that server :contentReference[oaicite:30]{index=30} :contentReference[oaicite:31]{index=31}
+## Host a Match
+1. Open the project in Unity.
+2. Load the `Bootstrap` scene.
+3. Enter a session/server name if desired.
+4. Choose whether the session is public or private.
+5. Click **Host**.
+6. After the lobby loads, start the game from the lobby UI.
 
-### Join
-- Enter an IP and click **Join**
-- Or add a server to the browser and join from its entry button
-- Clients connect to the selected IP and port :contentReference[oaicite:32]{index=32} :contentReference[oaicite:33]{index=33}
-
-### Refresh Browser
-- Click **Refresh**
-- Or allow the browser to refresh automatically every 5 seconds while in the bootstrap scene :contentReference[oaicite:34]{index=34} :contentReference[oaicite:35]{index=35}
-
----
-
-## Planned Gameplay Systems
-
-The design target for the full game includes:
-
-- 20-wave survival mode
-- zombie enemy scaling by wave
-- multiple enemy archetypes such as runner, tank, spitter, and mutant
-- defensive buildables such as barriers, turrets, spike traps, and explosive mines
-- player and weapon upgrades
-- multiple maps
-- co-op revive systems
-- replayability through upgrade paths and map variation :contentReference[oaicite:36]{index=36}
-
-The recommended initial gameplay scope remains:
-- 1 map
-- 1–2 enemy types
-- 2–3 weapons
-- a basic wave system :contentReference[oaicite:37]{index=37}
+## Join a Match
+1. Open the `Bootstrap` scene.
+2. Enter a join code and click **Join**  
+   or
+3. Use the public session browser and join from an available entry.
 
 ---
 
-## Credits
+## Design Direction
 
-Project concept and design direction by the repository owner @Yorgi11 and collaborator @Baldi7327
+The long-term target for Zombie TD is a fuller hybrid of:
+- co-op FPS combat
+- defendable objective pressure
+- between-wave preparation
+- buildable defenses
+- stronger weapon and progression systems
+- more enemy archetypes
+- multiple maps and match variations
 
-Initial design basis taken from the Zombie TD concept document, including:
-- FPS / tower defense / survival hybrid
-- 1–4 player co-op
-- wave-based survival structure
-- enemy escalation and map concepts
-- progression and replayability goals :contentReference[oaicite:39]{index=39}
+Next expansions:
+- more weapons
+- barriers, traps, turrets, and repair systems
+- clearer tower damage / loss state
+- enemy variety with unique behaviors
+- buy stations or upgrade systems
+- better game state transitions and win/lose flow
+- dedicated server support and persistence improvements
+
+---
+
+## Current Strengths of the Project
+
+What this repo already does well:
+- separates local feel from authoritative server logic
+- uses object pooling for both bullets and zombies
+- supports real multiplayer session flow instead of local-only testing
+- has a working wave/combat/points/respawn gameplay backbone
+- is organized around extensible gameplay systems rather than a one-off prototype script pile
+
+---
+
+## Notes
+
+This project is still in active prototype / foundation development. Some systems are intentionally simple or placeholder-level, but the repo already contains the main architecture needed to grow into a larger co-op zombie survival game.
+
+The best way to describe the current state is:
+
+**a functional multiplayer gameplay prototype with server-authoritative combat, wave spawning, pooled enemies, and lobby-to-match flow already in place.**

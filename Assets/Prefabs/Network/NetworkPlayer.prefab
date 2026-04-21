@@ -166,7 +166,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 4065324306
+  GlobalObjectIdHash: 773038363
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -300,6 +300,7 @@ MonoBehaviour:
   _animationCamShake: 1
   _maxLookDeltaPerFrame: 90
   _aimTarget: {fileID: 5325468573432943723}
+  _inputSendRate: 30
 --- !u!114 &8630491588009098916
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -312,6 +313,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 97977281051e758498833ac280ce622b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DamageableObject
+  _isPlayer: 1
   _maxHp: 100
 --- !u!1 &3571200737664782194
 GameObject:

@@ -43,6 +43,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private Vector2 _moveInput;
     private Vector2 _lookInput;
 
+    private int _points;
+
     private bool _menuInteract;
     private bool _isDeadLocal;
     private bool _deathMenuVisible;
@@ -75,10 +77,12 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
     private readonly Collider[] _groundHits = new Collider[8];
 
-    public event Action<int, int> OnAmmoChanged;
+    public event Action<int> OnPointsChanged;
     public event Action<float> OnHPChanged;
+    public event Action<int, int> OnAmmoChanged;
 
     public Vector3 SpawnPos { get; private set; }
+    public int Points => _points;
     public Gun CurrentGun => _currentGun;
     public DamageableObject DamageableObject => _damageableObject;
 
@@ -89,11 +93,21 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _damageableObject = GetComponent<DamageableObject>();
     }
 
-    public override void OnNetworkSpawn() => InitializeNetworkState();
+    public override void OnNetworkSpawn()
+    {
+        InitializeNetworkState();
+
+        if (IsServer && GameManager.Instance != null)
+            GameManager.Instance.RegisterServerPlayer(this);
+    }
+
     public override void OnGainedOwnership() => InitializeNetworkState();
 
     public override void OnNetworkDespawn()
     {
+        if (IsServer && GameManager.Instance != null)
+            GameManager.Instance.UnregisterServerPlayer(this);
+
         CleanupLocalOwnerState();
         _networkInitialized = false;
     }
@@ -111,6 +125,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             if (GameManager.Instance != null && GameManager.Instance._guns != null && GameManager.Instance._guns.Length > 0)
                 _equippedGunDefinition = GameManager.Instance._guns[0];
         }
+
+        OnPointsChanged?.Invoke(_points);
 
         if (_damageableObject != null)
         {
@@ -316,9 +332,12 @@ public sealed class NetworkPlayerController : NetworkBehaviour
 
         if (_currentGun != null)
         {
-            Vector3 aimWorldPoint = _aimTarget != null ?
-                _aimTarget.position : (_camT != null ? _camT.position + _camT.forward * 100f : transform.position + transform.forward * 100f);
+            Vector3 aimWorldPoint = _aimTarget != null
+                ? _aimTarget.position
+                : (_camT != null ? _camT.position + _camT.forward * 100f : transform.position + transform.forward * 100f);
+
             _currentGun.RunUpdate(_isAiming, Time.deltaTime, aimWorldPoint);
+
             if (_attackHeld) _currentGun.TryShoot();
             if (_input.Player.Attack.WasReleasedThisFrame()) _currentGun.ReleaseTrigger();
         }

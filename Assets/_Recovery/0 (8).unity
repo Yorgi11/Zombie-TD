@@ -1378,25 +1378,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f312ef2a600a4134eaefd9b9dff5fb0d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
-  _regularZombiePrefab: {fileID: 8454600031337680090, guid: 66ea36b7324c9c14696f1251d0b37981, type: 3}
-  _special1ZombiePrefab: {fileID: 0}
-  _special2ZombiePrefab: {fileID: 0}
-  _special3ZombiePrefab: {fileID: 0}
-  _safePhaseTime: 15
-  _waveInfos:
-  - _enemyCountNTotal: 20
-    _enemyCountN: 10
-    _enemyCountSp1Total: 0
-    _enemyCountSp1: 0
-    _enemyCountSp2Total: 0
-    _enemyCountSp2: 0
-    _enemyCountSp3Total: 0
-    _enemyCountSp3: 0
-    _spawnTime: 0.3
+  _safePhaseTime: 0
+  _waveInfos: []
+  _spawnPoints: []
   _netBoot: {fileID: 598671971}
   _bulletHitMask:
     serializedVersion: 2
-    m_Bits: 1
+    m_Bits: 65
   _guns:
   - {fileID: 3447192829919185107, guid: 07034c3ce30383a49acac96ccd164a76, type: 3}
 --- !u!1 &780841174

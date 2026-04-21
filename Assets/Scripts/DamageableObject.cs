@@ -1,11 +1,11 @@
+using QF_Tools.QF_Utilities;
 using System;
 using UnityEngine;
-
-[RequireComponent(typeof(NetworkPlayerController))]
 public class DamageableObject : MonoBehaviour
 {
+    [SerializeField] private bool _isPlayer;
     [SerializeField] private float _maxHp;
-    [SerializeField] private NetworkPlayerController _netPlayer;
+    private NetworkPlayerController _netPlayer;
 
     public Action Die;
     public float CurrentHP { get; private set; }
@@ -16,26 +16,27 @@ public class DamageableObject : MonoBehaviour
 
     private void Awake()
     {
-        if (!_netPlayer) _netPlayer = GetComponent<NetworkPlayerController>();
+        if (!_netPlayer && _isPlayer) gameObject.TryGetComponentInChildren<NetworkPlayerController>(out _netPlayer);
         CurrentHP = _maxHp;
         RaiseHPChanged();
     }
 
     public bool TakeDamage(float damage)
     {
-        if (damage <= 0f || IsDead) return false;
+        if (damage <= 0f || IsDead && _isPlayer) return false;
 
         CurrentHP -= damage;
 
         bool died = CurrentHP <= 0f;
-        if (died) CurrentHP = 0f;
+        if (died && _isPlayer) CurrentHP = 0f;
 
         RaiseHPChanged();
-        if (_netPlayer) _netPlayer.ServerSyncHealthState();
+        if (_netPlayer && _isPlayer) _netPlayer.ServerSyncHealthState();
 
         if (died)
         {
-            Die?.Invoke();
+            if (_isPlayer) Die?.Invoke();
+            gameObject.SetActive(false);
             return true;
         }
 
@@ -46,7 +47,7 @@ public class DamageableObject : MonoBehaviour
     {
         CurrentHP = _maxHp;
         RaiseHPChanged();
-        if (_netPlayer) _netPlayer.ServerSyncHealthState();
+        if (_netPlayer && _isPlayer) _netPlayer.ServerSyncHealthState();
     }
 
     private void RaiseHPChanged()

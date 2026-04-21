@@ -6,6 +6,8 @@ public class GameUI : QF_Singleton<GameUI>
 {
     [SerializeField] private GameObject _deathScreen;
     [SerializeField] private Button _respawnButton;
+    [SerializeField] private TMP_Text _waveText;
+    [SerializeField] private TMP_Text _pointsText;
     [SerializeField] private TMP_Text _ammoText;
     [SerializeField] private Slider _hpSlider;
 
@@ -39,9 +41,11 @@ public class GameUI : QF_Singleton<GameUI>
             _localPlayer = player;
             _localPlayer.OnAmmoChanged += HandleAmmoChanged;
             _localPlayer.OnHPChanged += HandleHPChanged;
+            _localPlayer.OnPointsChanged += HandlePointsChanged;
 
             if (_localPlayer.CurrentGun != null) HandleAmmoChanged(_localPlayer.CurrentGun.CurrentAmmoInMag, _localPlayer.CurrentGun.CurrentReserveAmmo);
             if (_localPlayer.DamageableObject != null) HandleHPChanged(_localPlayer.DamageableObject.CurrentHP);
+            HandlePointsChanged(_localPlayer.Points);
             break;
         }
     }
@@ -50,6 +54,7 @@ public class GameUI : QF_Singleton<GameUI>
         if (_localPlayer == null) return;
         _localPlayer.OnAmmoChanged -= HandleAmmoChanged;
         _localPlayer.OnHPChanged -= HandleHPChanged;
+        _localPlayer.OnPointsChanged -= HandlePointsChanged;
         _localPlayer = null;
     }
     private void HandleAmmoChanged(int currentAmmoInMag, int currentReserveAmmo)
@@ -60,6 +65,10 @@ public class GameUI : QF_Singleton<GameUI>
     {
         if (_hpSlider != null) _hpSlider.value = Mathf.CeilToInt(currentHP);
     }
+    private void HandlePointsChanged(int points)
+    {
+        if (_pointsText != null) _pointsText.text = $"$ {points}";
+    }
     private void OnRespawnClicked()
     {
         if (_localPlayer != null) _localPlayer.HandleRespawn();
@@ -67,5 +76,9 @@ public class GameUI : QF_Singleton<GameUI>
     public void ToggleDeathScreen()
     {
         if (_deathScreen != null) _deathScreen.SetActive(!_deathScreen.activeInHierarchy);
+    }
+    public void UpdateWaveText(string text)
+    {
+        if (_waveText != null) _waveText.text = text;
     }
 }

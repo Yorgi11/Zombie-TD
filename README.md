@@ -383,7 +383,7 @@ The long-term target for Zombie TD is a fuller hybrid of:
 - more enemy archetypes
 - multiple maps and match variations
 
-Next expansions:
+Likely next expansions:
 - more weapons
 - barriers, traps, turrets, and repair systems
 - clearer tower damage / loss state

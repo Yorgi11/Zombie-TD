@@ -1,50 +1,127 @@
+using Unity.Netcode;
 using UnityEngine;
-public class Turret : MonoBehaviour
+[RequireComponent(typeof(NetworkObject))]
+public class Turret : NetworkBehaviour
 {
-    [SerializeField] private Transform _rotor;  // Y rotation / yaw
-    [SerializeField] private Transform _head;   // X rotation / pitch
+    [SerializeField] private Transform _rotor;
+    [SerializeField] private Transform _head;
     [SerializeField] private Transform _barrel;
+    [SerializeField] private Transform _muzzle;
     [SerializeField] private float _turnSpeed = 180f;
     [SerializeField] private float _pitchSpeed = 180f;
     [SerializeField] private float _minPitch = -30f;
     [SerializeField] private float _maxPitch = 60f;
     [SerializeField] private float _minFireAngle = 3f;
+    [SerializeField] private float _targetDistance = 20f;
+    [Space]
+    [SerializeField] private int _placementCost;
+    [Space]
+    [SerializeField] private LayerMask _enemyMask;
     [Space]
     [SerializeField] private Gun _attachedGun;
 
     private Transform _target;
-    public void SetTarget(Transform target) => _target = target;
+    private readonly Collider[] _targetHits = new Collider[32];
+
+    public int PlacementCost => _placementCost;
+    private void Awake()
+    {
+        if (_attachedGun != null) _attachedGun.OnShotRequested += HandleGunShotRequested;
+    }
+    public override void OnDestroy()
+    {
+        base.OnDestroy();
+        if (_attachedGun != null) _attachedGun.OnShotRequested -= HandleGunShotRequested;
+    }
+    public override void OnNetworkSpawn()
+    {
+        if (!IsServer) enabled = false;
+    }
+    private void Update()
+    {
+        if (!IsServer) return;
+        SetTarget();
+        PointAtTarget();
+    }
+    private Vector3 GetDirectionToTarget() => (_target.position + 0.5f * Vector3.up) - _barrel.position;
+    private void HandleGunShotRequested(Gun gun)
+    {
+        if (!IsServer) return;
+        if (gun == null) return;
+        if (ServerBulletPool.Instance == null) return;
+        if (_barrel == null) return;
+        if (_target == null) return;
+        ServerBulletPool.Instance.SpawnBullet(
+            _barrel.position,
+            _barrel.forward * gun.BulletVelocity,
+            gun.BulletDamage,
+            gun.BulletPenetration,
+            ulong.MaxValue
+        );
+    }
     public void PointAtTarget()
     {
         if (_target == null || _rotor == null || _head == null || _barrel == null) return;
-        Vector3 targetPosition = _target.position;
-        Vector3 toTarget = targetPosition - _barrel.position;
-        if (toTarget.sqrMagnitude <= 0.0001f) return;
-        RotateRotor(toTarget);
-        RotateHead(targetPosition);
-        if (Vector3.Angle(_barrel.forward, toTarget) <= _minFireAngle) _attachedGun.TryShoot();
+        RotateRotor();
+        RotateHead();
+        if (_attachedGun != null && Vector3.Angle(_barrel.forward, GetDirectionToTarget()) <= _minFireAngle) _attachedGun.TryShoot();
     }
-    private void RotateRotor(Vector3 worldDirectionToTarget)
+    private void RotateRotor()
     {
-        Vector3 flatDirection = Vector3.ProjectOnPlane(worldDirectionToTarget, _rotor.up);
-        if (flatDirection.sqrMagnitude <= 0.0001f) return;
-        _rotor.rotation = Quaternion.RotateTowards(
-            _rotor.rotation,
-            Quaternion.LookRotation(flatDirection, _rotor.up),
-            _turnSpeed * Time.deltaTime
-        );
+        if (_rotor == null || _rotor.parent == null || _barrel == null) return;
+        _rotor.forward = Vector3.Lerp(_rotor.forward, Vector3.ProjectOnPlane(GetDirectionToTarget(), Vector3.up), _turnSpeed * Time.deltaTime);
     }
-    private void RotateHead(Vector3 targetPosition)
+    private void RotateHead()
     {
-        Vector3 localDirection =
-            _head.parent.InverseTransformPoint(targetPosition) -
-            _head.parent.InverseTransformPoint(_head.position);
-        float pitch = -Mathf.Atan2(localDirection.y, localDirection.z) * Mathf.Rad2Deg;
-        pitch = Mathf.Clamp(pitch, _minPitch, _maxPitch);
-        _head.localRotation = Quaternion.RotateTowards(
-            _head.localRotation,
-            Quaternion.Euler(pitch, 0f, 0f),
-            _pitchSpeed * Time.deltaTime
-        );
+        if (_head == null || _head.parent == null || _barrel == null) return;
+        _head.forward = Vector3.Lerp(_head.forward, Vector3.ProjectOnPlane(GetDirectionToTarget(), _head.right), _pitchSpeed * Time.deltaTime);
+    }
+    public void SetTarget()
+    {
+        _target = null;
+        Vector3 origin = transform.position;
+        float radius = 1f;
+
+        while (radius <= _targetDistance)
+        {
+            int hitCount = Physics.OverlapSphereNonAlloc(
+                origin,
+                radius,
+                _targetHits,
+                _enemyMask,
+                QueryTriggerInteraction.Ignore
+            );
+            if (hitCount <= 0)
+            {
+                radius += 5f;
+                continue;
+            }
+            if (hitCount >= _targetHits.Length && radius < _targetDistance + 1f)
+            {
+                radius += 5f;
+                continue;
+            }
+            _target = GetClosestTarget(origin, hitCount);
+            return;
+        }
+    }
+    private Transform GetClosestTarget(Vector3 origin, int hitCount)
+    {
+        Transform closestTarget = null;
+        float closestSqrDistance = float.MaxValue;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hit = _targetHits[i];
+            if (hit == null) continue;
+
+            float sqrDistance = (hit.transform.position - origin).sqrMagnitude;
+            if (sqrDistance < closestSqrDistance)
+            {
+                closestSqrDistance = sqrDistance;
+                closestTarget = hit.transform;
+            }
+        }
+        return closestTarget;
     }
 }

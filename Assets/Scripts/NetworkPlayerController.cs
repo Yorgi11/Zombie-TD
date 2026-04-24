@@ -48,6 +48,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private bool _menuInteract;
     private bool _isDeadLocal;
     private bool _deathMenuVisible;
+    private bool _placePressedThisFrame;
 
     private bool _jumpInput;
     private bool _attackHeld;
@@ -311,19 +312,49 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             }
         }
     }
+    public bool TrySpendPoints(int amount)
+    {
+        if (!IsServer) return false;
+        if (amount <= 0) return true;
+        if (_points < amount) return false;
 
+        _points -= amount;
+        OnPointsChanged?.Invoke(_points);
+
+        ClientRpcParams target = new()
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { OwnerClientId }
+            }
+        };
+
+        SyncPointsClientRpc(_points, target);
+        return true;
+    }
     public void AddPoints(int amount)
     {
-        if (!IsServer || amount <= 0)
-            return;
+        if (!IsServer || amount <= 0) return;
 
         _points += amount;
         OnPointsChanged?.Invoke(_points);
-        SyncPointsClientRpc(_points);
+
+        ClientRpcParams target = new()
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new[] { OwnerClientId }
+            }
+        };
+
+        SyncPointsClientRpc(_points, target);
     }
+
     [ClientRpc]
-    private void SyncPointsClientRpc(int newPoints)
+    private void SyncPointsClientRpc(int newPoints, ClientRpcParams clientRpcParams = default)
     {
+        if (!IsOwner) return;
+
         _points = newPoints;
         OnPointsChanged?.Invoke(_points);
     }
@@ -358,6 +389,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             if (_input.Player.Attack.WasReleasedThisFrame()) _currentGun.ReleaseTrigger();
         }
 
+        if (_placePressedThisFrame) TryRequestTurretPlacement();
+
         SendInputToServerIfNeeded();
     }
 
@@ -391,6 +424,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _jumpInput = _input.Player.Jump.IsPressed();
         _attackHeld = _input.Player.Attack.IsPressed();
         _isAiming = _input.UI.RightClick.IsPressed();
+        _placePressedThisFrame = _input.Player.Interact.WasPressedThisFrame();
     }
 
     private MoveState GetCurrentMoveState()
@@ -439,6 +473,32 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             _cameraTarget.position,
             Quaternion.Slerp(_camT.rotation, targetRot, _animationCamShake)
         );
+    }
+
+    private void TryRequestTurretPlacement()
+    {
+        if (!IsOwner || _isDeadLocal) return;
+        if (TurretManager.Instance == null) return;
+
+        int placementIndex = TurretManager.Instance.GetNearestPlacementIndex(_t.position);
+        if (placementIndex < 0) return;
+
+        if (IsServer)
+        {
+            TurretManager.Instance.TryPlaceTurretServer(this, placementIndex);
+            return;
+        }
+
+        RequestPlaceTurretServerRpc(placementIndex);
+    }
+
+    [ServerRpc]
+    private void RequestPlaceTurretServerRpc(int placementIndex)
+    {
+        if (!IsServer) return;
+        if (TurretManager.Instance == null) return;
+
+        TurretManager.Instance.TryPlaceTurretServer(this, placementIndex);
     }
 
     private void SendInputToServerIfNeeded()

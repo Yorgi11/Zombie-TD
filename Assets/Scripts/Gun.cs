@@ -108,6 +108,7 @@ public class Gun : MonoBehaviour
     }
     public void TryShoot()
     {
+        Debug.Log($"{gameObject.name} called TryShoot");
         if (_isSemiAuto && _semiAutoTriggerLocked) return;
         Shoot();
     }

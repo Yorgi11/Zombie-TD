@@ -69,12 +69,16 @@ public class Turret : NetworkBehaviour
     private void RotateRotor()
     {
         if (_rotor == null || _rotor.parent == null || _barrel == null) return;
-        _rotor.forward = Vector3.Lerp(_rotor.forward, Vector3.ProjectOnPlane(GetDirectionToTarget(), Vector3.up), _turnSpeed * Time.deltaTime);
+        _rotor.forward = Vector3.RotateTowards(_rotor.forward,
+            (Vector3.ProjectOnPlane(GetDirectionToTarget(), Vector3.up)).normalized,
+            Mathf.Deg2Rad * _turnSpeed * Time.deltaTime, 0f);
     }
     private void RotateHead()
     {
         if (_head == null || _head.parent == null || _barrel == null) return;
-        _head.forward = Vector3.Lerp(_head.forward, Vector3.ProjectOnPlane(GetDirectionToTarget(), _head.right), _pitchSpeed * Time.deltaTime);
+        _head.forward = Vector3.RotateTowards(_head.forward,
+            (Vector3.ProjectOnPlane(GetDirectionToTarget(), _head.right)).normalized,
+            Mathf.Deg2Rad * _pitchSpeed * Time.deltaTime, 0f);
     }
     public void SetTarget()
     {

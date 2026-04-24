@@ -389,6 +389,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             if (_input.Player.Attack.WasReleasedThisFrame()) _currentGun.ReleaseTrigger();
         }
 
+        UpdateTurretPlacementUI();
         if (_placePressedThisFrame) TryRequestTurretPlacement();
 
         SendInputToServerIfNeeded();
@@ -474,14 +475,62 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             Quaternion.Slerp(_camT.rotation, targetRot, _animationCamShake)
         );
     }
+    private void UpdateTurretPlacementUI()
+    {
+        if (!IsOwner || _isDeadLocal || _menuInteract)
+        {
+            if (GameUI.Instance != null)
+            {
+                GameUI.Instance.ClearInteractText();
+                GameUI.Instance.ShowPlacementIndicator(false);
+            }
+            return;
+        }
 
+        if (TurretManager.Instance == null || GameUI.Instance == null)
+            return;
+
+        if (!TurretManager.Instance.TryGetNearestPlacementInfo(_t.position, out int placementIndex, out bool occupied, out Transform placementPoint))
+        {
+            GameUI.Instance.ClearInteractText();
+            GameUI.Instance.ShowPlacementIndicator(false);
+            return;
+        }
+
+        if (placementPoint == null)
+        {
+            GameUI.Instance.ClearInteractText();
+            GameUI.Instance.ShowPlacementIndicator(false);
+            return;
+        }
+
+        if (occupied)
+        {
+            GameUI.Instance.UpdateInteractText("Press E to upgrade turret");
+            GameUI.Instance.ShowPlacementIndicator(false);
+        }
+        else
+        {
+            GameUI.Instance.UpdateInteractText("Press E to place turret");
+            GameUI.Instance.SetPlacementIndicatorPosition(placementPoint.position);
+            GameUI.Instance.ShowPlacementIndicator(true);
+        }
+    }
     private void TryRequestTurretPlacement()
     {
         if (!IsOwner || _isDeadLocal) return;
         if (TurretManager.Instance == null) return;
 
-        int placementIndex = TurretManager.Instance.GetNearestPlacementIndex(_t.position);
+        if (!TurretManager.Instance.TryGetNearestPlacementInfo(_t.position, out int placementIndex, out bool occupied, out _))
+            return;
+
         if (placementIndex < 0) return;
+
+        if (occupied)
+        {
+            Debug.Log("[NetworkPlayerController] Upgrade request not implemented yet.");
+            return;
+        }
 
         if (IsServer)
         {

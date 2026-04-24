@@ -2,6 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using QF_Tools.QF_Utilities;
+
 public class GameUI : QF_Singleton<GameUI>
 {
     [SerializeField] private GameObject _deathScreen;
@@ -9,29 +10,42 @@ public class GameUI : QF_Singleton<GameUI>
     [SerializeField] private TMP_Text _waveText;
     [SerializeField] private TMP_Text _pointsText;
     [SerializeField] private TMP_Text _ammoText;
+    [SerializeField] private TMP_Text _interactText;
     [SerializeField] private Slider _hpSlider;
 
+    [Header("Placement")]
+    [SerializeField] private GameObject _placementIndicator;
+
     private NetworkPlayerController _localPlayer;
+
     protected override void Awake()
     {
         base.Awake();
         if (_respawnButton != null) _respawnButton.onClick.AddListener(OnRespawnClicked);
+
+        ClearInteractText();
+        ShowPlacementIndicator(false);
     }
+
     private void OnEnable()
     {
         TryBindLocalOwner();
     }
+
     private void Update()
     {
         if (_localPlayer == null) TryBindLocalOwner();
     }
+
     private void OnDisable()
     {
         UnbindLocalOwner();
     }
+
     private void TryBindLocalOwner()
     {
         if (_localPlayer != null) return;
+
         NetworkPlayerController[] players = FindObjectsByType<NetworkPlayerController>(FindObjectsSortMode.None);
         for (int i = 0; i < players.Length; i++)
         {
@@ -43,12 +57,17 @@ public class GameUI : QF_Singleton<GameUI>
             _localPlayer.OnHPChanged += HandleHPChanged;
             _localPlayer.OnPointsChanged += HandlePointsChanged;
 
-            if (_localPlayer.CurrentGun != null) HandleAmmoChanged(_localPlayer.CurrentGun.CurrentAmmoInMag, _localPlayer.CurrentGun.CurrentReserveAmmo);
-            if (_localPlayer.DamageableObject != null) HandleHPChanged(_localPlayer.DamageableObject.CurrentHP);
+            if (_localPlayer.CurrentGun != null)
+                HandleAmmoChanged(_localPlayer.CurrentGun.CurrentAmmoInMag, _localPlayer.CurrentGun.CurrentReserveAmmo);
+
+            if (_localPlayer.DamageableObject != null)
+                HandleHPChanged(_localPlayer.DamageableObject.CurrentHP);
+
             HandlePointsChanged(_localPlayer.Points);
             break;
         }
     }
+
     private void UnbindLocalOwner()
     {
         if (_localPlayer == null) return;
@@ -57,28 +76,55 @@ public class GameUI : QF_Singleton<GameUI>
         _localPlayer.OnPointsChanged -= HandlePointsChanged;
         _localPlayer = null;
     }
+
     private void HandleAmmoChanged(int currentAmmoInMag, int currentReserveAmmo)
     {
         if (_ammoText != null) _ammoText.text = $"{currentAmmoInMag} / {currentReserveAmmo}";
     }
+
     private void HandleHPChanged(float currentHP)
     {
         if (_hpSlider != null) _hpSlider.value = Mathf.CeilToInt(currentHP);
     }
+
     private void HandlePointsChanged(int points)
     {
         if (_pointsText != null) _pointsText.text = $"$ {points}";
     }
+
     private void OnRespawnClicked()
     {
         if (_localPlayer != null) _localPlayer.HandleRespawn();
     }
+
     public void ToggleDeathScreen()
     {
         if (_deathScreen != null) _deathScreen.SetActive(!_deathScreen.activeInHierarchy);
     }
+
     public void UpdateWaveText(string text)
     {
         if (_waveText != null) _waveText.text = text;
+    }
+
+    public void UpdateInteractText(string text)
+    {
+        if (_interactText != null) _interactText.text = text;
+    }
+
+    public void ClearInteractText()
+    {
+        if (_interactText != null) _interactText.text = string.Empty;
+    }
+
+    public void ShowPlacementIndicator(bool show)
+    {
+        if (_placementIndicator != null) _placementIndicator.SetActive(show);
+    }
+
+    public void SetPlacementIndicatorPosition(Vector3 worldPosition)
+    {
+        if (_placementIndicator != null)
+            _placementIndicator.transform.position = worldPosition;
     }
 }

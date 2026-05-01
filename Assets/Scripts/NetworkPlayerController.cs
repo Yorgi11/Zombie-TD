@@ -77,7 +77,13 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     private float _jumpLockUntil;
 
     private readonly Collider[] _groundHits = new Collider[8];
+    private readonly ulong[] _ownerClientIdBuffer = new ulong[1];
 
+    private const string PlaceTurretText = "Press E to place turret";
+    private const string UpgradeTurretText = "Press E to upgrade turret";
+
+    public static event Action<NetworkPlayerController> LocalOwnerInitialized;
+    public static NetworkPlayerController CurrentLocalOwner { get; private set; }
     public event Action<int> OnPointsChanged;
     public event Action<float> OnHPChanged;
     public event Action<int, int> OnAmmoChanged;
@@ -172,6 +178,8 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             _isDeadLocal = _damageableObject != null && _damageableObject.IsDead;
             SetDeathMenuVisible(_isDeadLocal);
             SetMenuInteract(_isDeadLocal);
+            CurrentLocalOwner = this;
+            LocalOwnerInitialized?.Invoke(this);
         }
     }
 
@@ -186,6 +194,9 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         if (!_localOwnerInitialized) return;
 
         _localOwnerInitialized = false;
+        if (CurrentLocalOwner == this)
+            CurrentLocalOwner = null;
+
         _input?.Disable();
 
         SetMenuInteract(true);
@@ -271,13 +282,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
             _rb.angularVelocity = Vector3.zero;
         }
 
-        ClientRpcParams target = new()
-        {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new[] { OwnerClientId }
-            }
-        };
+        ClientRpcParams target = GetOwnerClientRpcParams();
 
         SyncHealthStateClientRpc(_damageableObject.CurrentHP, isDead, SpawnPos, target);
     }
@@ -321,13 +326,7 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _points -= amount;
         OnPointsChanged?.Invoke(_points);
 
-        ClientRpcParams target = new()
-        {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new[] { OwnerClientId }
-            }
-        };
+        ClientRpcParams target = GetOwnerClientRpcParams();
 
         SyncPointsClientRpc(_points, target);
         return true;
@@ -339,15 +338,21 @@ public sealed class NetworkPlayerController : NetworkBehaviour
         _points += amount;
         OnPointsChanged?.Invoke(_points);
 
-        ClientRpcParams target = new()
+        ClientRpcParams target = GetOwnerClientRpcParams();
+
+        SyncPointsClientRpc(_points, target);
+    }
+
+    private ClientRpcParams GetOwnerClientRpcParams()
+    {
+        _ownerClientIdBuffer[0] = OwnerClientId;
+        return new ClientRpcParams
         {
             Send = new ClientRpcSendParams
             {
-                TargetClientIds = new[] { OwnerClientId }
+                TargetClientIds = _ownerClientIdBuffer
             }
         };
-
-        SyncPointsClientRpc(_points, target);
     }
 
     [ClientRpc]
@@ -460,9 +465,10 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         float clampedLookX = Mathf.Clamp(_lookInput.x, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
         float clampedLookY = Mathf.Clamp(_lookInput.y, -_maxLookDeltaPerFrame, _maxLookDeltaPerFrame);
-        Vector2 input = _mouseSensitivity * new Vector2(clampedLookX, clampedLookY);
-        _localXRot = Mathf.Clamp(_localXRot - input.y, _camLimits.x, _camLimits.y);
-        _localYRot += input.x;
+        float scaledLookX = clampedLookX * _mouseSensitivity;
+        float scaledLookY = clampedLookY * _mouseSensitivity;
+        _localXRot = Mathf.Clamp(_localXRot - scaledLookY, _camLimits.x, _camLimits.y);
+        _localYRot += scaledLookX;
     }
 
     private void LateUpdateCamera()
@@ -479,41 +485,44 @@ public sealed class NetworkPlayerController : NetworkBehaviour
     {
         if (!IsOwner || _isDeadLocal || _menuInteract)
         {
-            if (GameUI.Instance != null)
+            GameUI gameUI = GameUI.Instance;
+            if (gameUI != null)
             {
-                GameUI.Instance.ClearInteractText();
-                GameUI.Instance.ShowPlacementIndicator(false);
+                gameUI.ClearInteractText();
+                gameUI.ShowPlacementIndicator(false);
             }
             return;
         }
 
-        if (TurretManager.Instance == null || GameUI.Instance == null)
+        TurretManager turretManager = TurretManager.Instance;
+        GameUI ui = GameUI.Instance;
+        if (turretManager == null || ui == null)
             return;
 
-        if (!TurretManager.Instance.TryGetNearestPlacementInfo(_t.position, out int placementIndex, out bool occupied, out Transform placementPoint))
+        if (!turretManager.TryGetNearestPlacementInfo(_t.position, out int placementIndex, out bool occupied, out Transform placementPoint))
         {
-            GameUI.Instance.ClearInteractText();
-            GameUI.Instance.ShowPlacementIndicator(false);
+            ui.ClearInteractText();
+            ui.ShowPlacementIndicator(false);
             return;
         }
 
         if (placementPoint == null)
         {
-            GameUI.Instance.ClearInteractText();
-            GameUI.Instance.ShowPlacementIndicator(false);
+            ui.ClearInteractText();
+            ui.ShowPlacementIndicator(false);
             return;
         }
 
         if (occupied)
         {
-            GameUI.Instance.UpdateInteractText("Press E to upgrade turret");
-            GameUI.Instance.ShowPlacementIndicator(false);
+            ui.UpdateInteractText(UpgradeTurretText);
+            ui.ShowPlacementIndicator(false);
         }
         else
         {
-            GameUI.Instance.UpdateInteractText("Press E to place turret");
-            GameUI.Instance.SetPlacementIndicatorPosition(placementPoint.position);
-            GameUI.Instance.ShowPlacementIndicator(true);
+            ui.UpdateInteractText(PlaceTurretText);
+            ui.SetPlacementIndicatorPosition(placementPoint.position);
+            ui.ShowPlacementIndicator(true);
         }
     }
     private void TryRequestTurretPlacement()

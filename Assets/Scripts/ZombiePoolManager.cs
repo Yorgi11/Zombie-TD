@@ -92,6 +92,7 @@ public class ZombiePool
 
     private readonly List<Zombie> _reserveZombies = new();
     private readonly List<Zombie> _activeZombies = new();
+    private readonly Dictionary<Zombie, int> _activeZombieIndices = new();
 
     public ZombiePool(GameManager.EnemyType enemyType, Zombie prefab)
     {
@@ -129,6 +130,7 @@ public class ZombiePool
         _reserveZombies.RemoveAt(lastIndex);
 
         zombie.OnTakenFromPool(position, rotation);
+        _activeZombieIndices[zombie] = _activeZombies.Count;
         _activeZombies.Add(zombie);
 
         return zombie;
@@ -136,12 +138,17 @@ public class ZombiePool
 
     public void ReturnZombie(Zombie zombie)
     {
-        int index = _activeZombies.IndexOf(zombie);
-        if (index >= 0)
+        if (_activeZombieIndices.TryGetValue(zombie, out int index))
         {
             int last = _activeZombies.Count - 1;
-            _activeZombies[index] = _activeZombies[last];
+            Zombie lastZombie = _activeZombies[last];
+            _activeZombies[index] = lastZombie;
             _activeZombies.RemoveAt(last);
+
+            if (index < last)
+                _activeZombieIndices[lastZombie] = index;
+
+            _activeZombieIndices.Remove(zombie);
         }
 
         zombie.OnReturnedToPool();

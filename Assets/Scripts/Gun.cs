@@ -108,7 +108,6 @@ public class Gun : MonoBehaviour
     }
     public void TryShoot()
     {
-        Debug.Log($"{gameObject.name} called TryShoot");
         if (_isSemiAuto && _semiAutoTriggerLocked) return;
         Shoot();
     }
@@ -121,9 +120,10 @@ public class Gun : MonoBehaviour
             if (_currentReserveAmmo > 0) Reload();
             return;
         }
-        if (Time.time < _nextAllowedShotTime) return;
-        _nextAllowedShotTime = Time.time + _timeBetweenShots;
-        if (_recoilRot.magnitude > 0.0001f) AddRecoil();
+        float now = Time.time;
+        if (now < _nextAllowedShotTime) return;
+        _nextAllowedShotTime = now + _timeBetweenShots;
+        if (_recoilRot.sqrMagnitude > 0.00000001f) AddRecoil();
         if (!_unlimitedAmmo)
         {
             _currentAmmoInMag--;

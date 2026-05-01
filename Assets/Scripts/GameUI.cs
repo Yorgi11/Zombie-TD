@@ -18,6 +18,15 @@ public class GameUI : QF_Singleton<GameUI>
 
     private NetworkPlayerController _localPlayer;
 
+    private int _lastAmmoInMag = int.MinValue;
+    private int _lastReserveAmmo = int.MinValue;
+    private int _lastPoints = int.MinValue;
+    private int _lastHP = int.MinValue;
+    private string _lastWaveText;
+    private string _lastInteractText;
+    private bool _lastPlacementVisible = true;
+    private float _nextLocalOwnerSearchTime;
+
     protected override void Awake()
     {
         base.Awake();
@@ -29,22 +38,43 @@ public class GameUI : QF_Singleton<GameUI>
 
     private void OnEnable()
     {
+        NetworkPlayerController.LocalOwnerInitialized -= HandleLocalOwnerInitialized;
+        NetworkPlayerController.LocalOwnerInitialized += HandleLocalOwnerInitialized;
         TryBindLocalOwner();
     }
 
     private void Update()
     {
-        if (_localPlayer == null) TryBindLocalOwner();
+        if (_localPlayer != null || Time.unscaledTime < _nextLocalOwnerSearchTime)
+            return;
+
+        _nextLocalOwnerSearchTime = Time.unscaledTime + 0.5f;
+        TryBindLocalOwner();
     }
 
     private void OnDisable()
     {
+        NetworkPlayerController.LocalOwnerInitialized -= HandleLocalOwnerInitialized;
         UnbindLocalOwner();
+    }
+
+    private void HandleLocalOwnerInitialized(NetworkPlayerController player)
+    {
+        if (player == null || !player.IsOwner)
+            return;
+
+        BindLocalOwner(player);
     }
 
     private void TryBindLocalOwner()
     {
         if (_localPlayer != null) return;
+
+        if (NetworkPlayerController.CurrentLocalOwner != null)
+        {
+            BindLocalOwner(NetworkPlayerController.CurrentLocalOwner);
+            return;
+        }
 
         NetworkPlayerController[] players = FindObjectsByType<NetworkPlayerController>(FindObjectsSortMode.None);
         for (int i = 0; i < players.Length; i++)
@@ -52,20 +82,30 @@ public class GameUI : QF_Singleton<GameUI>
             NetworkPlayerController player = players[i];
             if (player == null || !player.IsOwner) continue;
 
-            _localPlayer = player;
-            _localPlayer.OnAmmoChanged += HandleAmmoChanged;
-            _localPlayer.OnHPChanged += HandleHPChanged;
-            _localPlayer.OnPointsChanged += HandlePointsChanged;
-
-            if (_localPlayer.CurrentGun != null)
-                HandleAmmoChanged(_localPlayer.CurrentGun.CurrentAmmoInMag, _localPlayer.CurrentGun.CurrentReserveAmmo);
-
-            if (_localPlayer.DamageableObject != null)
-                HandleHPChanged(_localPlayer.DamageableObject.CurrentHP);
-
-            HandlePointsChanged(_localPlayer.Points);
+            BindLocalOwner(player);
             break;
         }
+    }
+
+    private void BindLocalOwner(NetworkPlayerController player)
+    {
+        if (_localPlayer == player)
+            return;
+
+        UnbindLocalOwner();
+
+        _localPlayer = player;
+        _localPlayer.OnAmmoChanged += HandleAmmoChanged;
+        _localPlayer.OnHPChanged += HandleHPChanged;
+        _localPlayer.OnPointsChanged += HandlePointsChanged;
+
+        if (_localPlayer.CurrentGun != null)
+            HandleAmmoChanged(_localPlayer.CurrentGun.CurrentAmmoInMag, _localPlayer.CurrentGun.CurrentReserveAmmo);
+
+        if (_localPlayer.DamageableObject != null)
+            HandleHPChanged(_localPlayer.DamageableObject.CurrentHP);
+
+        HandlePointsChanged(_localPlayer.Points);
     }
 
     private void UnbindLocalOwner()
@@ -79,17 +119,32 @@ public class GameUI : QF_Singleton<GameUI>
 
     private void HandleAmmoChanged(int currentAmmoInMag, int currentReserveAmmo)
     {
-        if (_ammoText != null) _ammoText.text = $"{currentAmmoInMag} / {currentReserveAmmo}";
+        if (_ammoText == null) return;
+        if (_lastAmmoInMag == currentAmmoInMag && _lastReserveAmmo == currentReserveAmmo) return;
+
+        _lastAmmoInMag = currentAmmoInMag;
+        _lastReserveAmmo = currentReserveAmmo;
+        _ammoText.SetText("{0} / {1}", currentAmmoInMag, currentReserveAmmo);
     }
 
     private void HandleHPChanged(float currentHP)
     {
-        if (_hpSlider != null) _hpSlider.value = Mathf.CeilToInt(currentHP);
+        if (_hpSlider == null) return;
+
+        int hp = Mathf.CeilToInt(currentHP);
+        if (_lastHP == hp) return;
+
+        _lastHP = hp;
+        _hpSlider.value = hp;
     }
 
     private void HandlePointsChanged(int points)
     {
-        if (_pointsText != null) _pointsText.text = $"$ {points}";
+        if (_pointsText == null) return;
+        if (_lastPoints == points) return;
+
+        _lastPoints = points;
+        _pointsText.SetText("$ {0}", points);
     }
 
     private void OnRespawnClicked()
@@ -104,22 +159,31 @@ public class GameUI : QF_Singleton<GameUI>
 
     public void UpdateWaveText(string text)
     {
-        if (_waveText != null) _waveText.text = text;
+        if (_waveText == null || _lastWaveText == text) return;
+
+        _lastWaveText = text;
+        _waveText.text = text;
     }
 
     public void UpdateInteractText(string text)
     {
-        if (_interactText != null) _interactText.text = text;
+        if (_interactText == null || _lastInteractText == text) return;
+
+        _lastInteractText = text;
+        _interactText.text = text;
     }
 
     public void ClearInteractText()
     {
-        if (_interactText != null) _interactText.text = string.Empty;
+        UpdateInteractText(string.Empty);
     }
 
     public void ShowPlacementIndicator(bool show)
     {
-        if (_placementIndicator != null) _placementIndicator.SetActive(show);
+        if (_placementIndicator == null || _lastPlacementVisible == show) return;
+
+        _lastPlacementVisible = show;
+        _placementIndicator.SetActive(show);
     }
 
     public void SetPlacementIndicatorPosition(Vector3 worldPosition)

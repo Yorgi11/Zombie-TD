@@ -13,6 +13,7 @@ public class Turret : NetworkBehaviour
     [SerializeField] private float _maxPitch = 60f;
     [SerializeField] private float _minFireAngle = 3f;
     [SerializeField] private float _targetDistance = 20f;
+    [SerializeField] private float _targetRefreshInterval = 0.2f;
     [Space]
     [SerializeField] private int _placementCost;
     [Space]
@@ -22,10 +23,16 @@ public class Turret : NetworkBehaviour
 
     private Transform _target;
     private readonly Collider[] _targetHits = new Collider[32];
+    private Transform _t;
+    private float _targetDistanceSqr;
+    private float _nextTargetRefreshTime;
+    private Vector3 _lastDirectionToTarget;
 
     public int PlacementCost => _placementCost;
     private void Awake()
     {
+        _t = transform;
+        _targetDistanceSqr = _targetDistance * _targetDistance;
         if (_attachedGun != null) _attachedGun.OnShotRequested += HandleGunShotRequested;
     }
     public override void OnDestroy()
@@ -40,10 +47,20 @@ public class Turret : NetworkBehaviour
     private void Update()
     {
         if (!IsServer) return;
-        SetTarget();
+
+        if (_target == null || Time.time >= _nextTargetRefreshTime || !IsTargetInRange())
+        {
+            _nextTargetRefreshTime = Time.time + _targetRefreshInterval;
+            SetTarget();
+        }
+
         PointAtTarget();
     }
-    private Vector3 GetDirectionToTarget() => (_target.position + 0.5f * Vector3.up) - _barrel.position;
+    private Vector3 GetDirectionToTarget()
+    {
+        _lastDirectionToTarget = (_target.position + 0.5f * Vector3.up) - _barrel.position;
+        return _lastDirectionToTarget;
+    }
     private void HandleGunShotRequested(Gun gun)
     {
         if (!IsServer) return;
@@ -62,52 +79,51 @@ public class Turret : NetworkBehaviour
     public void PointAtTarget()
     {
         if (_target == null || _rotor == null || _head == null || _barrel == null) return;
+
+        Vector3 directionToTarget = GetDirectionToTarget();
         RotateRotor();
         RotateHead();
-        if (_attachedGun != null && Vector3.Angle(_barrel.forward, GetDirectionToTarget()) <= _minFireAngle) _attachedGun.TryShoot();
+        if (_attachedGun != null && Vector3.Angle(_barrel.forward, directionToTarget) <= _minFireAngle) _attachedGun.TryShoot();
     }
     private void RotateRotor()
     {
         if (_rotor == null || _rotor.parent == null || _barrel == null) return;
         _rotor.forward = Vector3.RotateTowards(_rotor.forward,
-            (Vector3.ProjectOnPlane(GetDirectionToTarget(), Vector3.up)).normalized,
+            (Vector3.ProjectOnPlane(_lastDirectionToTarget, Vector3.up)).normalized,
             Mathf.Deg2Rad * _turnSpeed * Time.deltaTime, 0f);
     }
     private void RotateHead()
     {
         if (_head == null || _head.parent == null || _barrel == null) return;
         _head.forward = Vector3.RotateTowards(_head.forward,
-            (Vector3.ProjectOnPlane(GetDirectionToTarget(), _head.right)).normalized,
+            (Vector3.ProjectOnPlane(_lastDirectionToTarget, _head.right)).normalized,
             Mathf.Deg2Rad * _pitchSpeed * Time.deltaTime, 0f);
     }
     public void SetTarget()
     {
         _target = null;
-        Vector3 origin = transform.position;
-        float radius = 1f;
+        Vector3 origin = _t.position;
 
-        while (radius <= _targetDistance)
-        {
-            int hitCount = Physics.OverlapSphereNonAlloc(
-                origin,
-                radius,
-                _targetHits,
-                _enemyMask,
-                QueryTriggerInteraction.Ignore
-            );
-            if (hitCount <= 0)
-            {
-                radius += 5f;
-                continue;
-            }
-            if (hitCount >= _targetHits.Length && radius < _targetDistance + 1f)
-            {
-                radius += 5f;
-                continue;
-            }
-            _target = GetClosestTarget(origin, hitCount);
+        int hitCount = Physics.OverlapSphereNonAlloc(
+            origin,
+            _targetDistance,
+            _targetHits,
+            _enemyMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        if (hitCount <= 0)
             return;
-        }
+
+        _target = GetClosestTarget(origin, hitCount);
+    }
+
+    private bool IsTargetInRange()
+    {
+        if (_target == null)
+            return false;
+
+        return (_target.position - _t.position).sqrMagnitude <= _targetDistanceSqr;
     }
     private Transform GetClosestTarget(Vector3 origin, int hitCount)
     {
